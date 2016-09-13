@@ -19,14 +19,14 @@ void deleteFile(char*);
 
 //TODO: add while loop of time, to delay the I/O process
 
-int main()
+int main(int argc, char* argv[])
 {
-
+   
    char str[LINES][REP];		
    char copy[LINES][REP];		
    srand(time(NULL));  //Define globally by default, should only be created once for randomness.
    int lines = 10;
-   char* fName = "outFile.txt";
+   char* fName = argv[1]; //"outFile.txt";
 
    writeFile(lines, fName, str);
    readFile(lines, fName, copy);
@@ -136,9 +136,9 @@ void compareArrays(char str[][REP], char copy[][REP]){
     
 }
 
-
+//Note: Don't use 'if(!remove(fileName))' because error will occur 
 void deleteFile(char* fileName){
-    if(!remove(fileName))  //if removing the file returns the 0 code for deletion
+    if(remove(fileName) == 0)  //if removing the file returns the 0 code for deletion
        printf("File %s deleted successfully\n", fileName);
     else 
        printf("Error, unable to delete file: %s.\n", fileName);

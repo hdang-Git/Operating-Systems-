@@ -47,7 +47,7 @@ void launch(FILE* output, char* filename, pid_t pid){
         fprintf(output, "%d\n", diff);
         printf("Wrote to timer file\n");
         fclose(output); 
-        execlp("./app", "./app", NULL); 
+        execlp("./app", "./app", "output.txt", NULL); 
         exit(0);
     } else if(pid < 0){  //Error handling 
         perror("fork error");

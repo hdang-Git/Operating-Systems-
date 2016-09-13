@@ -21,7 +21,7 @@ int main(){
     pid_t pid1;
     pid_t pid2;
     char* style = "***************************************"; 
-    for(i = 0; i < 1; i++){
+    for(i = 0; i < 5; i++){
         printf("%s iteration %d %s\n", style, i, style);
         //launch(output1, fileName1, pid1, 1);
 	launch(output1, output2, fileName1, fileName2, pid1, pid2, 1, 2);
@@ -53,7 +53,7 @@ void launch(FILE* output, FILE* output2, char* filename, char* filename2,
         fprintf(output, "%d\n", diff);
         printf("Wrote to timer of child %d file\n", num);
         fclose(output); 
-        execlp("./app", "./app", NULL); 
+        execlp("./app", "./app", "outFile1.txt", NULL); 
         exit(0);
     } else if(pid < 0){  //Error handling 
         perror("fork error");
@@ -85,7 +85,7 @@ void launch2(FILE* output, char* filename, pid_t pid, int num){
         fprintf(output, "%d\n", diff);
         printf("Wrote to timer of child %d file\n", num);
         fclose(output); 
-        execlp("./app", "./app", NULL); 
+        execlp("./app", "./app", "outFile2.txt",NULL); 
         exit(0);
     } else if(pid < 0){  //Error handling 
         perror("fork error");
