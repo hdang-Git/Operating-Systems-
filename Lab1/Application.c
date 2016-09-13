@@ -1,34 +1,39 @@
 #include<stdio.h>
 #include<stdlib.h>
-
+#include <unistd.h>
 #define REP 120			//Number of charecters to write
 #define CHARSTART 33		//first ascii character is ! -> this is to avoid odd characters
-#define CHAREND 126		//
+#define CHAREND 126		
 #define LINES 10
+#define TIME 1
 
-char str[LINES][REP];		//Global array
-char copy[LINES][REP];		//Read 
 //function prototype
 char randomAlpha();
 void checkAlpha();
-void readFile(int, char[]);
-void writeFile(int, char[]);
-void printArray();
-//void compareArrays();
+void readFile(int, char[], char[][REP]);
+void writeFile(int, char[], char[][REP]);
+void printArray(char[][REP]);
+void printLine(int, char[][REP], char*);
+void compareArrays(char[][REP], char[][REP]);
+void deleteFile(char*);
 
 //TODO: add while loop of time, to delay the I/O process
 
 int main()
 {
+
+   char str[LINES][REP];		
+   char copy[LINES][REP];		
    srand(time(NULL));  //Define globally by default, should only be created once for randomness.
-   //printf("Random number: %c\n", randomAlpha());
-   //checkAlpha();
    int lines = 10;
    char* fName = "outFile.txt";
-   //writeFile(lines, fName);
-   readFile(lines, fName);
+
+   writeFile(lines, fName, str);
+   readFile(lines, fName, copy);
    printf("\n");
-   printArray();
+   printArray(copy);
+   compareArrays(str, copy);
+   deleteFile(fName);
    return 0;
 }
 
@@ -39,7 +44,7 @@ char randomAlpha()
    return random;
 }
 
-void writeFile(int lines, char fileName[]){
+void writeFile(int lines, char fileName[], char str[][REP]){
    //printf("%d  %s\n", lines, fileName);
    int i;
    int j;
@@ -50,7 +55,8 @@ void writeFile(int lines, char fileName[]){
    printf("Writing to file\n");
    for(i = 0; i < lines; i++){
       printf("filling array %d\n", i);
-      for(j = 0; j < REP; j++){
+      sleep(TIME);
+      for(j = 0; j < REP; j++){  
         str[i][j] = randomAlpha();
         //fprintf(output, "%c", str[i][j]); //This works too!     
       } 
@@ -63,7 +69,7 @@ void writeFile(int lines, char fileName[]){
 }
 
 //TODO: add error handling if file DNE
-void readFile(int lines, char fileName[]){
+void readFile(int lines, char fileName[], char copy[][REP]){
     int i;
 
     FILE *input;
@@ -74,13 +80,6 @@ void readFile(int lines, char fileName[]){
 	fscanf(input, "%s", copy[i]);
     }
 */
-/*
-    while(!feof(input)){
-	printf("Seeking through file\n");
-        fread(copy[i], sizeof(char), sizeof(copy[i]), input);
-	i++;
-    }
-*/
     
     while(!feof(input)){
 	if(i == 0)
@@ -88,6 +87,7 @@ void readFile(int lines, char fileName[]){
 	else 
 	    fseek(input, i * 120 + i * 2, SEEK_SET);
 	printf("ftell(): %ld\n",ftell(input));
+        sleep(TIME);
 	fread(copy[i],sizeof(char),sizeof(copy[i]),input);
 	i++;
     }
@@ -96,7 +96,16 @@ void readFile(int lines, char fileName[]){
 }
 
 
-void printArray(){
+void printLine(int num, char arr[][REP], char* name){
+    int i;
+    printf("\n%s\n", name);
+    for(i = 0; i < REP; i++){
+        printf("%c", arr[num][i]);
+    }
+    printf("\n");
+}
+
+void printArray(char copy[][REP]){
    int i, j;
    for(i = 0; i < LINES; i++){
       printf("%d.\n", i);
@@ -105,6 +114,34 @@ void printArray(){
       }
       printf("\n");
    }
+}
+
+void compareArrays(char str[][REP], char copy[][REP]){
+    int random = rand() % 10;
+    printf("\nrandom #: %d\n", random);
+    printLine(random, copy, "copy");
+    printLine(random, str, "str");
+    int flag = 1; //true
+    int i = 0;
+    char* message = "Strings are the same";
+    
+    while(i < REP && flag){
+       if(str[random][i] != copy[random][i]){
+           flag = 0;
+	   message = "FALSE NOT EQUAL "; 
+       }        
+       i++;
+    }
+    printf("%s\n",message);
+    
+}
+
+
+void deleteFile(char* fileName){
+    if(!remove(fileName))  //if removing the file returns the 0 code for deletion
+       printf("File %s deleted successfully\n", fileName);
+    else 
+       printf("Error, unable to delete file: %s.\n", fileName);
 }
 
 //shows that time is defaulted to seconds
