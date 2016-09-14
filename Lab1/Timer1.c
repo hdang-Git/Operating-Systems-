@@ -15,7 +15,7 @@
 #include <sys/wait.h>
 
 //function prototypes
-void launch(FILE*, char*, pid_t);
+void launch(char*, pid_t);
 long int getTime(struct timeval);
 
 
@@ -26,13 +26,11 @@ long int getTime(struct timeval);
 int main(){
     int i;
     char* fileName1 = "timer1.csv";				//Set the filename
-    FILE* output;						//Create a pointer to FILE
-    output = fopen(fileName1, "w");				//Open a file to write into
     pid_t pid1;							//Create process id type 
     char* style = "***************************************"; 
     for(i = 0; i < SIZE; i++){
         printf("%s iteration %d %s\n", style, i, style);	
-        launch(output, fileName1, pid1);			//Call launch() to run the routine of forking the process
+        launch(fileName1, pid1);        //Call launch() to run the routine of forking the process
     }
 }
 
@@ -58,30 +56,23 @@ long int getTime(struct timeval t){
  * the case where the pid returns a negative value signaling an error value.                 *
  *                                                                                           *
  * Preconditions:                                                                            *
- * @params output - File pointer for output stream                                           *
  * @params filename - output file name                                                       *
  * @params pid - process id                                                                  *
  * @return void                                                                              *
  *********************************************************************************************/
-void launch(FILE* output, char* filename, pid_t pid){
+void launch(char* filename, pid_t pid){
     struct timeval t;
     long int start = getTime(t);				//get start time in microseconds
-    long int end = start;					//set end time to equal start time so difference is non-negative
-
-    printf("Start: %ld, End: %ld\n", start, end);
-   
+    char startTime[50];
+    sprintf(startTime, "%ld", start);				//Convert start to char array
+    
+    printf("Start: %ld\n", start);
     pid = fork();						//fork the current process
            
     if(pid == 0){  //child process
         printf("Child process with id %d. My parent is %d. \n", getpid(),  getppid());
-        end = getTime(t);					//get the end time in microseconds
-        long int diff = end - start;				//calculate the difference
-        printf("\nEnd time of child : %ld\n", end);
-        printf("TIME DIFF: %ld\n", diff);   
-        fprintf(output, "%ld\n", diff);				//write to file the difference delimited by newlines
-        printf("Wrote to timer file\n");
-        fclose(output); 					//close the file I/O stream
-        execlp("./app", "./app", "output.txt", NULL); 		//Execute the executable file which will replace current child process
+        //Execute the executable file which will replace current child process
+        execlp("./app", "./app", "output.txt", startTime, filename, NULL); 		
         exit(0);						
     } else if(pid < 0){  //Error handling if error code		
         perror("fork error");					//Print error message

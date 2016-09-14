@@ -6,8 +6,8 @@
  *
  * 	Note: 
  * 		sample cmd - 
- *              Ex.  ./app output.txt 
- *              Ex.  ./a.out testing.txt
+ *              Ex.  ./app output.txt "32323325" time.csv
+ *              Ex.  ./a.out testing.txt "910938598" t.csv
  */
 
 #define LINES 10		//Number of lines/rows to write
@@ -19,6 +19,8 @@
 #include<stdio.h>
 #include<stdlib.h>
 #include <unistd.h>
+#include<sys/time.h>
+
 
 //function prototypes
 char randomAlpha();
@@ -35,7 +37,10 @@ void deleteFile(char*);
  * compareArrays(), and deleteFile() methods that create a 2 dimensional array, fill it with *
  * random char characters, writes to file, then reads file, stores read data to another 2d   *
  * array, compares the two arrays, and deletes the file.                                     *
- * Preconditions: Expects argv[] to store a string filename i.e. "output.txt"                *
+ * Preconditions:                                                                            *
+ * Expects argv[1] to store a string filename i.e. "output.txt"                              *
+ * Expects argv[2] to store the start time passed in as a string  i.e. "4993292930"          *
+ * Expects argv[3] to store the output filename for the process time i.e. "timeOutput.csv"   *
  *********************************************************************************************/
 int main(int argc, char* argv[])
 {
@@ -43,14 +48,29 @@ int main(int argc, char* argv[])
    char str[LINES][REP];   		//two-dim array to store characters when writing	
    char copy[LINES][REP];  		//two-dim array to store characters from reading
    srand(time(NULL));  	   		//Define globally by default, should only be created once for randomness.
-   char* fName = argv[1];  		//store the filename from argument vector ;
+   char* fName = argv[1];  			     //store the filename for this program's output 
+   char* ptr;					
+   long start = strtol(argv[2], &ptr, 10);	     //Convert string to long	
+   printf("Start time: %ld\n", start); 
+   
+   struct timeval t;
+   gettimeofday(&t, NULL);			    //get the end time in microseconds
+   long int end = t.tv_sec * 1000000L + t.tv_usec;  //Convert s & us to us
+   long int diff = end - start;			    //calculate the difference
+   char* csvFile= argv[3];			    //get timer output filename
+   FILE*  outputCSV = fopen(csvFile, "a");	    //Open csv file					
+   printf("\nEnd time of child : %ld\n", end);
+   printf("TIME DIFF: %ld\n", diff);   
+   fprintf(outputCSV, "%ld,\n", diff);		    //write to file the difference delimited by ,& \n
+   printf("Wrote to timer file\n");
+   fclose(outputCSV); 				    //close the file I/O stream
 
-   writeFile(fName, str);  	//Call writeFile() to write random characters to a file and  store in str array
+   writeFile(fName, str);  	//Call writeFile() to write random char to a file and store in str
    readFile(fName, copy);	//Call readFile() to read in file to copy array
    printf("\n");
-   printArray(copy);		        //Call printArray() to print out copy array 
-   compareArrays(str, copy);		//Call compareArrays() to compare both str and copy array in memory
-   deleteFile(fName);			//Call deleteFile() to delete file from current directory 
+   printArray(copy);		//Call printArray() to print out copy array 
+   compareArrays(str, copy);	//Call compareArrays() to compare both str and copy array in memory
+   deleteFile(fName);		//Call deleteFile() to delete file from current directory 
    return 0;
 }
 
