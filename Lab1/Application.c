@@ -1,15 +1,27 @@
+/*
+ * This program writes a file with ten lines of random characters. During the write process, these 
+ * random characters are stored in a two-dimensional array. Then the program reads the output file 
+ * and then compares it against what's stored in local memory. Afterwards, the file is then deleted.
+ *
+ *
+ * 	Note: 
+ * 		sample cmd - 
+ *              Ex.  ./app output.txt 
+ *              Ex.  ./a.out testing.txt
+ */
+
+#define REP 120			//Number of characters/columns to write
+#define LINES 10		//Number of lines/rows to write to
+#define CHARSTART 33		//first readable ascii character
+#define CHAREND 126		//last readable ascii character
+#define TIME 1			//Sleep time is in seconds
+
 #include<stdio.h>
 #include<stdlib.h>
 #include <unistd.h>
-#define REP 120			//Number of charecters to write
-#define CHARSTART 33		//first ascii character is ! -> this is to avoid odd characters
-#define CHAREND 126		
-#define LINES 10
-#define TIME 1
 
-//function prototype
+//function prototypes
 char randomAlpha();
-void checkAlpha();
 void readFile(int, char[], char[][REP]);
 void writeFile(int, char[], char[][REP]);
 void printArray(char[][REP]);
@@ -17,26 +29,40 @@ void printLine(int, char[][REP], char*);
 void compareArrays(char[][REP], char[][REP]);
 void deleteFile(char*);
 
-//TODO: add while loop of time, to delay the I/O process
 
+/*********************************************************************************************
+ * The main function takes in arguments and calls the writeFile(), readFile(), printArray(), *
+ * compareArrays(), and deleteFile() methods that create a 2 dimensional array, fill it with *
+ * random char characters, writes to file, then reads file, stores read data to another 2d   *
+ * array, compares the two arrays, and deletes the file.                                     *
+ * Preconditions: Expects argv[] to store a string filename i.e. "output.txt"                *
+ *********************************************************************************************/
 int main(int argc, char* argv[])
 {
    
-   char str[LINES][REP];		
-   char copy[LINES][REP];		
-   srand(time(NULL));  //Define globally by default, should only be created once for randomness.
-   int lines = 10;
-   char* fName = argv[1]; //"outFile.txt";
+   char str[LINES][REP];   		//two-dim array to store characters when writing	
+   char copy[LINES][REP];  		//two-dim array to store characters from reading
+   srand(time(NULL));  	   		//Define globally by default, should only be created once for randomness.
+   int lines = 10;	   		//store the desired number of lines of the textfile
+   char* fName = argv[1];  		//store the filename from argument vector ;
 
-   writeFile(lines, fName, str);
-   readFile(lines, fName, copy);
+   writeFile(lines, fName, str);  	//Call writeFile() to write random characters to a file and  store in str array
+   readFile(lines, fName, copy);	//Call readFile() to read in file to copy array
    printf("\n");
-   printArray(copy);
-   compareArrays(str, copy);
-   deleteFile(fName);
+   printArray(copy);		        //Call printArray() to print out copy array 
+   compareArrays(str, copy);		//Call compareArrays() to compare both str and copy array in memory
+   deleteFile(fName);			//Call deleteFile() to delete file from current directory 
    return 0;
 }
 
+
+/*********************************************************************************************
+ * This function creates a random character by using the rand() function and casting it to a *
+ * char. And then it returns the character                                                   *
+ *                                                                                           *
+ * Postconditions:                                                                           *
+ * @returns random character to caller.                                                      *
+ *********************************************************************************************/
 char randomAlpha()
 {
    char random;
@@ -44,58 +70,82 @@ char randomAlpha()
    return random;
 }
 
+
+/*********************************************************************************************
+ * This function iterates through the desired lines and calls randomAlpha() to return a      *
+ * random character. When the character is returned, it is stored in each column of the 2-d  *
+ * array and each row of the array is then written to the output file.                       *
+ *                                                                                           *
+ * Preconditions:                                                                            *
+ * @param lines - number of lines                                                            *
+ * @param fileName - name of the file,                                                       *
+ * @param str - array to populate                                                            *
+ * @return void										     *
+ *********************************************************************************************/
 void writeFile(int lines, char fileName[], char str[][REP]){
-   //printf("%d  %s\n", lines, fileName);
    int i;
    int j;
    
    FILE *output;
    
-   output = fopen(fileName, "w");
+   output = fopen(fileName, "w");				//open or create file if DNE, and set mode to write
    printf("Writing to file\n");
    for(i = 0; i < lines; i++){
       printf("filling array %d\n", i);
-      sleep(TIME);
+      sleep(TIME);						//Pause for each line write to lengthen time of process
       for(j = 0; j < REP; j++){  
-        str[i][j] = randomAlpha();
-        //fprintf(output, "%c", str[i][j]); //This works too!     
+        str[i][j] = randomAlpha();    				//Call randomAlpha() to return a random character and store in array
       } 
-      fwrite(str[i], sizeof(char), sizeof(str[i]), output);	
+      
+      fwrite(str[i], sizeof(char), sizeof(str[i]), output);	//write each line stored in array to output file 
       printf("writing now\n");
-      fprintf(output, "%s", "\r\n");
+      fprintf(output, "%s", "\r\n");				//write a new line to file as a delimiter
    }
    printf("DONE\n");
-   fclose(output);
+   fclose(output);						//Close the file I/O stream
 }
 
-//TODO: add error handling if file DNE
+/*********************************************************************************************
+ * This function reads in a file by setting up an input file stream, seeking through the     *
+ * file for the desired position and then read into the 2-d array the data from the file     *
+ * while the file is not empty                                                               *
+ *                                                                                           *
+ * Preconditions:                                                                            *
+ * @param lines - number of lines                                                            *
+ * @param fileName - name of the file,                                                       *
+ * @param copy - array to populate                                                           *
+ * @return void		                                                                     *
+ *********************************************************************************************/
 void readFile(int lines, char fileName[], char copy[][REP]){
     int i;
 
-    FILE *input;
-    input = fopen(fileName, "rb+");
-/*
-    for(i = 0; i < lines; i++){
-	printf("Seeking through file\n");
-	fscanf(input, "%s", copy[i]);
-    }
-*/
-    
-    while(!feof(input)){
-	if(i == 0)
-	    fseek(input, i * 120,SEEK_SET);
+    FILE *input; 
+    input = fopen(fileName, "rb+");				//open file for reading
+   
+    while(!feof(input)){                                        //while not the end of the file
+	if(i == 0)	
+	    fseek(input, i * 120,SEEK_SET);                     //set cursor position to beginning of file
 	else 
-	    fseek(input, i * 120 + i * 2, SEEK_SET);
-	printf("ftell(): %ld\n",ftell(input));
-        sleep(TIME);
-	fread(copy[i],sizeof(char),sizeof(copy[i]),input);
+	    fseek(input, i * 120 + i * 2, SEEK_SET);            //set cursor to calculated position to account for \r\n delimiters
+	printf("ftell(): %ld\n",ftell(input));			//print to screen the position of the cursor
+        sleep(TIME);						//Pause the program to lengthen time of process
+	fread(copy[i],sizeof(char),sizeof(copy[i]),input);	//read each line of the file and populate it into the array
 	i++;
     }
     printf("DONE reading\n");
-    fclose(input);
+    fclose(input);						//Close the file I/O stream
 }
 
-
+/*********************************************************************************************
+ * This function prints to console/terminal the values stored in the current row of the      *
+ * array.                                                                                    *
+ *                                                                                           *
+ * Preconditions:                                                                            *
+ * @param num - row number                                                                   *
+ * @param arr - two-dimensional array                                                        *
+ * @param name - name of the array                                                           *
+ * @return void		                                                                     *
+ *********************************************************************************************/
 void printLine(int num, char arr[][REP], char* name){
     int i;
     printf("\n%s\n", name);
@@ -105,6 +155,14 @@ void printLine(int num, char arr[][REP], char* name){
     printf("\n");
 }
 
+//TODO: chagnge name of copy to arr
+/*********************************************************************************************
+ * This function loops through the array and prints out its contents                         *
+ *                                                                                           *
+ * Preconditions:                                                                            *
+ * @param arr - two-dimensional array                                                        *
+ * @return void                                                                              * 
+ *********************************************************************************************/
 void printArray(char copy[][REP]){
    int i, j;
    for(i = 0; i < LINES; i++){
@@ -116,17 +174,26 @@ void printArray(char copy[][REP]){
    }
 }
 
+/*********************************************************************************************
+ * This function takes two arrays and creates a random number from 0 to 9. It then chooses   *
+ * that index as the line number to compare the contents stored at that index for both       *
+ * arrays.                                                                                   *
+ *                                                                                           *
+ * Preconditions:                                                                            *
+ * @param str - two-dimensional array storing written data                                   *
+ * @param copy - two-dimensional array storing read data                                     *
+ *********************************************************************************************/
 void compareArrays(char str[][REP], char copy[][REP]){
-    int random = rand() % 10;
+    int random = rand() % 10;		 	//generate a random number from 0 to 9 for the index
     printf("\nrandom #: %d\n", random);
-    printLine(random, copy, "copy");
-    printLine(random, str, "str");
-    int flag = 1; //true
+    printLine(random, copy, "copy");		//Call printLine() to print to screen the selected row of copy
+    printLine(random, str, "str");   		//Call printLine() to print to screen the selected row of str
+    int flag = 1; 				//set a flag to true
     int i = 0;
-    char* message = "Strings are the same";
+    char* message = "Strings are the same";     //Default message if true
     
-    while(i < REP && flag){
-       if(str[random][i] != copy[random][i]){
+    while(i < REP && flag){                     //while counter is less than the number of columns and the flag is true
+       if(str[random][i] != copy[random][i]){   //if the characters don't match set the flag to 0 and change the message
            flag = 0;
 	   message = "FALSE NOT EQUAL "; 
        }        
@@ -136,27 +203,19 @@ void compareArrays(char str[][REP], char copy[][REP]){
     
 }
 
+/*********************************************************************************************
+ * This function deletes the output file from the current diretory.                          *
+ *                                                                                           *
+ * Preconditions:                                                                            * 
+ * @param fileName - name of the file to delete                                              *
+ *********************************************************************************************/
 //Note: Don't use 'if(!remove(fileName))' because error will occur 
 void deleteFile(char* fileName){
-    if(remove(fileName) == 0)  //if removing the file returns the 0 code for deletion
+    if(remove(fileName) == 0)  			//if removing the file returns the 0 code for deletion
        printf("File %s deleted successfully\n", fileName);
     else 
        printf("Error, unable to delete file: %s.\n", fileName);
 }
 
-//shows that time is defaulted to seconds
-//Also using random numbers from 33 to 126 to avoid odd characters
-//TODO: delete this func and all usagez
-void checkAlpha(){
-   int i;
-   char random;
-   for(i = 33; i <= 126; i++){
-     random = randomAlpha();
-     printf("%d:%c ", i, random);
-     if(((i-32) % 10) == 0)
-       printf("\n");
-   }
-   printf("\n");
-}
 
 
