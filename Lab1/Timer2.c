@@ -4,7 +4,7 @@
  * file. A total of three processes will be created for each iteration one parent and two children.
  */
 
-#define SIZE 1
+#define SIZE 100
 #include<stdio.h>
 #include<sys/time.h>
 #include<unistd.h>
@@ -15,7 +15,7 @@
 //function prototypes
 void launch(FILE*, FILE*, char*, char*, pid_t, pid_t, int, int);
 void launch2(FILE*, char*, pid_t, int);
-float getTime(struct timeval);
+long int getTime(struct timeval);
 
 /*********************************************************************************************
  * The main function calls the launch() function a hundred times which in turn  create a     *
@@ -23,8 +23,8 @@ float getTime(struct timeval);
  *********************************************************************************************/
 int main(){
     int i;
-    char* fileName1 = "timer2_a.txt";				//Set the filename for first child process
-    char* fileName2 = "timer2_b.txt";				//Set the filename for second child process
+    char* fileName1 = "timer2_a.csv";				//Set the filename for first child process
+    char* fileName2 = "timer2_b.csv";				//Set the filename for second child process
     FILE* output1 = fopen(fileName1, "w");			//Create a file to write to for first child process
     FILE* output2 = fopen(fileName2, "w");			//Create a file to write to for second child process
     pid_t pid1;							
@@ -43,13 +43,12 @@ int main(){
  * t - a struct                                                                              *
  *                                                                                           *
  * Postconditions:                                                                           *
- * @return the time in microseconds as a float                                               *
+ * @return the time in microseconds as a long int                                            *
  *********************************************************************************************/
-float getTime(struct timeval t){
+long int getTime(struct timeval t){
     gettimeofday(&t, NULL);
-    return t.tv_usec;
+    return t.tv_sec * 1000000L + t.tv_usec;
 }
-
 
 /*********************************************************************************************
  * This function forks the current process and if the child is a process, executes the       *
@@ -72,20 +71,20 @@ float getTime(struct timeval t){
 void launch(FILE* output, FILE* output2, char* filename, char* filename2, 
             pid_t pid, pid_t pid2, int num, int num2){
     struct timeval t;
-    float start = getTime(t);					//get start time in microseconds
-    float end = start;						//set end time to equal start time so difference is non-negative
+    long int start = getTime(t);				//get start time in microseconds
+    long int end = start;					//set end time to equal start time so difference is non-negative
 
-    printf("Start: %f, End: %f\n", start, end);
+    printf("Start: %ld, End: %ld\n", start, end);
    
     pid = fork();						//fork the current process
            
     if(pid == 0){  //1st child process
         printf("Child %d process with id %d. My parent is %d. \n", num, getpid(),  getppid());
         end = getTime(t);					//get the end time in microseconds
-        int diff = end - start;					//calculate the difference
-        printf("\nEnd time of child %d : %f\n", num, end);
-        printf("TIME DIFF of child %d : %d\n", num, diff);
-        fprintf(output, "%d\n", diff);				//write to file 1 the difference delimited by newlines
+        long int diff = end - start;				//calculate the difference
+        printf("\nEnd time of child %d : %ld\n", num, end);
+        printf("TIME DIFF of child %d : %ld\n", num, diff);
+        fprintf(output, "%ld\n", diff);				//write to file 1 the difference delimited by newlines
         printf("Wrote to timer of child %d file\n", num);
         fclose(output);                                         //close the file I/O stream
         execlp("./app", "./app", "outFile1.txt", NULL); 	//Execute the executable file which will replace current child process
@@ -116,20 +115,20 @@ void launch(FILE* output, FILE* output2, char* filename, char* filename2,
  *********************************************************************************************/
 void launch2(FILE* output, char* filename, pid_t pid, int num){
     struct timeval t;
-    float start = getTime(t);					//get start time in microseconds
-    float end = start;						//calculate the difference
+    long int start = getTime(t);					//get start time in microseconds
+    long int end = start;						//calculate the difference
 
-    printf("Start: %f, End: %f\n", start, end);
+    printf("Start: %ld, End: %ld\n", start, end);
    
     pid = fork();						//fork the current process 
            
     if(pid == 0){  //child process
         printf("Child %d process with id %d. My parent is %d. \n", num, getpid(),  getppid());
         end = getTime(t);					//get the end time in microseconds
-        int diff = end - start;					//calculate the difference  
-        printf("\nEnd time of child %d : %f\n", num, end);	
-        printf("TIME DIFF of child %d : %d\n", num, diff);	
-        fprintf(output, "%d\n", diff);				//write to file 2 the difference delimited by newlines
+        long int diff = end - start;				//calculate the difference  
+        printf("\nEnd time of child %d : %ld\n", num, end);	
+        printf("TIME DIFF of child %d : %ld\n", num, diff);	
+        fprintf(output, "%ld\n", diff);				//write to file 2 the difference delimited by newlines
         printf("Wrote to timer of child %d file\n", num);	
         fclose(output); 
         execlp("./app", "./app", "outFile2.txt",NULL); 		//Execute the executable file which will replace current child process

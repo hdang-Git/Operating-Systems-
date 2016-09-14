@@ -16,7 +16,7 @@
 
 //function prototypes
 void launch(FILE*, char*, pid_t);
-float getTime(struct timeval);
+long int getTime(struct timeval);
 
 
 /*********************************************************************************************
@@ -25,7 +25,7 @@ float getTime(struct timeval);
  *********************************************************************************************/
 int main(){
     int i;
-    char* fileName1 = "timer1.txt";				//Set the filename
+    char* fileName1 = "timer1.csv";				//Set the filename
     FILE* output;						//Create a pointer to FILE
     output = fopen(fileName1, "w");				//Open a file to write into
     pid_t pid1;							//Create process id type 
@@ -38,17 +38,17 @@ int main(){
 
 
 /*********************************************************************************************
- * This function gets the current time of day and returns the the time in microseconds       *
+ * This function gets the current time of day and returns the t5*he time in microseconds       *
  *          										     *
  * Preconditions:                                                                            *
  * t - a struct                                                                              *
  *                                                                                           *
  * Postconditions:                                                                           *
- * @return the time in microseconds as a float                                               *
+ * @return the time in microseconds as a long int                                            *
  *********************************************************************************************/
-float getTime(struct timeval t){
+long int getTime(struct timeval t){
     gettimeofday(&t, NULL);
-    return t.tv_usec;
+    return t.tv_sec * 1000000L + t.tv_usec;
 }
 
 /*********************************************************************************************
@@ -65,20 +65,20 @@ float getTime(struct timeval t){
  *********************************************************************************************/
 void launch(FILE* output, char* filename, pid_t pid){
     struct timeval t;
-    float start = getTime(t);					//get start time in microseconds
-    float end = start;						//set end time to equal start time so difference is non-negative
+    long int start = getTime(t);				//get start time in microseconds
+    long int end = start;					//set end time to equal start time so difference is non-negative
 
-    printf("Start: %f, End: %f\n", start, end);
+    printf("Start: %ld, End: %ld\n", start, end);
    
     pid = fork();						//fork the current process
            
     if(pid == 0){  //child process
         printf("Child process with id %d. My parent is %d. \n", getpid(),  getppid());
         end = getTime(t);					//get the end time in microseconds
-        int diff = end - start;					//calculate the difference
-        printf("\nEnd time of child : %f\n", end);
-        printf("TIME DIFF: %d\n", diff);   
-        fprintf(output, "%d\n", diff);				//write to file the difference delimited by newlines
+        long int diff = end - start;				//calculate the difference
+        printf("\nEnd time of child : %ld\n", end);
+        printf("TIME DIFF: %ld\n", diff);   
+        fprintf(output, "%ld\n", diff);				//write to file the difference delimited by newlines
         printf("Wrote to timer file\n");
         fclose(output); 					//close the file I/O stream
         execlp("./app", "./app", "output.txt", NULL); 		//Execute the executable file which will replace current child process

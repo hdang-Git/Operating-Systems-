@@ -10,11 +10,11 @@
  *              Ex.  ./a.out testing.txt
  */
 
+#define LINES 10		//Number of lines/rows to write
 #define REP 120			//Number of characters/columns to write
-#define LINES 10		//Number of lines/rows to write to
 #define CHARSTART 33		//first readable ascii character
 #define CHAREND 126		//last readable ascii character
-#define TIME 1			//Sleep time is in seconds
+#define TIME 125000		//Sleep time is in microseconds
 
 #include<stdio.h>
 #include<stdlib.h>
@@ -22,8 +22,8 @@
 
 //function prototypes
 char randomAlpha();
-void readFile(int, char[], char[][REP]);
-void writeFile(int, char[], char[][REP]);
+void readFile(char[], char[][REP]);
+void writeFile(char[], char[][REP]);
 void printArray(char[][REP]);
 void printLine(int, char[][REP], char*);
 void compareArrays(char[][REP], char[][REP]);
@@ -43,11 +43,10 @@ int main(int argc, char* argv[])
    char str[LINES][REP];   		//two-dim array to store characters when writing	
    char copy[LINES][REP];  		//two-dim array to store characters from reading
    srand(time(NULL));  	   		//Define globally by default, should only be created once for randomness.
-   int lines = 10;	   		//store the desired number of lines of the textfile
    char* fName = argv[1];  		//store the filename from argument vector ;
 
-   writeFile(lines, fName, str);  	//Call writeFile() to write random characters to a file and  store in str array
-   readFile(lines, fName, copy);	//Call readFile() to read in file to copy array
+   writeFile(fName, str);  	//Call writeFile() to write random characters to a file and  store in str array
+   readFile(fName, copy);	//Call readFile() to read in file to copy array
    printf("\n");
    printArray(copy);		        //Call printArray() to print out copy array 
    compareArrays(str, copy);		//Call compareArrays() to compare both str and copy array in memory
@@ -82,7 +81,7 @@ char randomAlpha()
  * @param str - array to populate                                                            *
  * @return void										     *
  *********************************************************************************************/
-void writeFile(int lines, char fileName[], char str[][REP]){
+void writeFile(char fileName[], char str[][REP]){
    int i;
    int j;
    
@@ -90,9 +89,9 @@ void writeFile(int lines, char fileName[], char str[][REP]){
    
    output = fopen(fileName, "w");				//open or create file if DNE, and set mode to write
    printf("Writing to file\n");
-   for(i = 0; i < lines; i++){
+   for(i = 0; i < LINES; i++){
       printf("filling array %d\n", i);
-      sleep(TIME);						//Pause for each line write to lengthen time of process
+      usleep(TIME);						//Pause for each line write to lengthen time of process
       for(j = 0; j < REP; j++){  
         str[i][j] = randomAlpha();    				//Call randomAlpha() to return a random character and store in array
       } 
@@ -116,11 +115,11 @@ void writeFile(int lines, char fileName[], char str[][REP]){
  * @param copy - array to populate                                                           *
  * @return void		                                                                     *
  *********************************************************************************************/
-void readFile(int lines, char fileName[], char copy[][REP]){
+void readFile(char fileName[], char copy[][REP]){
     int i;
 
     FILE *input; 
-    input = fopen(fileName, "rb+");				//open file for reading
+    input = fopen(fileName, "r");				//open file for reading
    
     while(!feof(input)){                                        //while not the end of the file
 	if(i == 0)	
@@ -128,7 +127,7 @@ void readFile(int lines, char fileName[], char copy[][REP]){
 	else 
 	    fseek(input, i * 120 + i * 2, SEEK_SET);            //set cursor to calculated position to account for \r\n delimiters
 	printf("ftell(): %ld\n",ftell(input));			//print to screen the position of the cursor
-        sleep(TIME);						//Pause the program to lengthen time of process
+        usleep(TIME);						//Pause the program to lengthen time of process
 	fread(copy[i],sizeof(char),sizeof(copy[i]),input);	//read each line of the file and populate it into the array
 	i++;
     }
@@ -163,12 +162,12 @@ void printLine(int num, char arr[][REP], char* name){
  * @param arr - two-dimensional array                                                        *
  * @return void                                                                              * 
  *********************************************************************************************/
-void printArray(char copy[][REP]){
+void printArray(char arr[][REP]){
    int i, j;
    for(i = 0; i < LINES; i++){
       printf("%d.\n", i);
       for(j = 0; j < REP; j++){
-      	printf("%c", copy[i][j]);
+      	printf("%c", arr[i][j]);
       }
       printf("\n");
    }
