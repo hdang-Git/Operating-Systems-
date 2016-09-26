@@ -7,13 +7,14 @@
 #include <unistd.h>
 #include <ctype.h>
 #include <string.h>
+#include <sys/types.h>
 #include <sys/wait.h>
 
 //function prototypes
 void parseCmd(char*, char*[]);
 char* trim(char*, char);
 int countSpace(char*,char);
-void launch(pid_t, char*[]);
+void launch(pid_t, char*[], int*);
 void check(char*[], int, int*, int*, char*[]);
 
 int main()
@@ -48,12 +49,12 @@ int main()
       	
       	  check(cmd, a, &valid, &bg, built_in);
       	  if(valid){							//valid built_in cmd
-      	  	printf("I'm VALID\n");
+      	  	printf("I'm VALID BUILT_IN CMD\n");
       	  	valid = FALSE;		//flip the flag to false for next read
       	  	//call switch command
       	  } else {								//not a built_in cmd
-      	  	printf("I'm INVALID\n");
-      	  	launch(pid, cmd);
+      	  	printf("I'm INVALID BUILT_IN CMD\n");
+      	  	launch(pid, cmd, &bg);
       	  	//fork the process and let the unix system handle it
       	  }
       	     
@@ -138,26 +139,39 @@ void check(char* input[], int size, int* valid, int* bg, char* built_in[]){
    
 }
 
-void launch(pid_t pid, char* args[]){
+void launch(pid_t pid, char* args[], int* bg){
+	//pid_t wpid;
+	printf("BACKGROUND STATUS: %d\n", *bg);
 	pid = fork();									//fork the current process
+	int status;
 	if(pid == 0){
-		printf("Child process with id %d. My parent is %d. \n", getpid(),  getppid());
+		//printf("Child process with id %d. My parent is %d. \n", getpid(),  getppid());
 		execlp(args[0], *args, NULL);
 		exit(0);
 	} else if(pid < 0){								//Error handling if error code
 		perror("Error incorrect arguments\n");		//Print error message
         exit(-1);									//Indicate unsuccessful program termination
 	}else {
-	    printf("Parent process with id %d my child is %d. \n", getpid(),  pid);
-		//if not background
-		//if background
-		waitpid(pid, NULL, 0);						//Wait for child process to finish
+	    //printf("Parent process with id %d my child is %d. \n", getpid(),  pid);
+		//if not background process, wait
+		if(!(*bg)){
+			printf("Not a background process\n");
+			//waitpid(pid, NULL, 0);		//Wait for child process to finish
+			
+			
+			if(waitpid(pid, &status, 0) < 0){
+				perror("PID ERROR\n");
+			}
+			
+			/*
+			do{
+				wpid = waitpid(pid, &status, WUNTRACED);
+			} while(!WIFEXITED(status) && !WIFSIGNALED(status));
+			*/
+		} else {									//if background, don't wait
+			printf("I am a background process\n");
+			*bg = FALSE;
+		}
 	}
 }
 
-
-/*
-
-http://stackoverflow.com/questions/298510/how-to-get-the-current-directory-in-a-c-program
-
-*/
