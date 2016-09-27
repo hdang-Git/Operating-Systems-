@@ -154,7 +154,26 @@ int check(char* input[], int size, int* valid, int* bg, char* built_in[]){
 }
 
 void switchCmd(int num, char* args[]){
-	
+	switch(num){
+		case 1	: 	my_cd(args);
+					break;
+		case 2	:	my_clear();	
+					break;
+		case 3	:	my_dir();
+					break;
+		case 4	:	my_env();
+					break;
+		case 5 	:	my_echo(args);
+					break;
+		case 6 	:	my_help();
+					break;
+		case 7	: 	my_pause();
+					break;
+		case 8	:	my_quit();
+					break;
+		default :	printf("Command DNE\n");
+					break;
+	}
 }
 
 void launch(pid_t pid, char* args[], int* bg){
@@ -164,7 +183,8 @@ void launch(pid_t pid, char* args[], int* bg){
 	int status;
 	if(pid == 0){
 		//printf("Child process with id %d. My parent is %d. \n", getpid(),  getppid());
-		execlp(args[0], *args, NULL);
+		//execlp(args[0], *args, NULL);
+		execvp(args[0], args);
 		exit(0);
 	} else if(pid < 0){								//Error handling if error code
 		perror("Error incorrect arguments\n");		//Print error message
