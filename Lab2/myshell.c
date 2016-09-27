@@ -183,8 +183,9 @@ void launch(pid_t pid, char* args[], int* bg){
 	int status;
 	if(pid == 0){
 		//printf("Child process with id %d. My parent is %d. \n", getpid(),  getppid());
-		//execlp(args[0], *args, NULL);
-		execvp(args[0], args);
+		if(*bg)										//if background, pass only one arg, &
+			execlp(args[0], *args, NULL);
+		execvp(args[0], args);						//else replace child with cmd with option args
 		exit(0);
 	} else if(pid < 0){								//Error handling if error code
 		perror("Error incorrect arguments\n");		//Print error message
