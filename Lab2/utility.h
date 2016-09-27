@@ -5,7 +5,7 @@
 	void my_clear();
 	void my_dir();
 	void my_env();
-	void my_echo();
+	void my_echo(char*[]);
 	void my_help();
 	void my_pause();
 	void my_quit();
