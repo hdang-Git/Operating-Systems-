@@ -9,13 +9,16 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include "utility.h"
 
 //function prototypes
 void parseCmd(char*, char*[]);
 char* trim(char*, char);
 int countSpace(char*,char);
 void launch(pid_t, char*[], int*);
-void check(char*[], int, int*, int*, char*[]);
+int check(char*[], int, int*, int*, char*[]);
+void rmNewLine(char*);
+void switchCmd(int, char*[]);
 
 int main()
 {
@@ -24,15 +27,15 @@ int main()
   size_t size = 100;
   
   char cwd[1024];
-  char* built_in[] = {"ls", "exit", "cd", "ls", "help", "\0"}; // list of commands
-
-  int valid = FALSE;			//valid command
-  int bg = FALSE;				//background process
-  //int l_bracket = FALSE;		//stdin redirection
-  //int r_bracket = FALSE;        //stdout redirection
+  //List of commands
+  char* built_in[] = {"cd", "clr", "dir", "environ", "echo", "help", "pause", "quit", "\0"}; 
+  int valid = FALSE;								//valid command
+  int bg = FALSE;									//background process
+  //int l_bracket = FALSE;							//stdin redirection
+  //int r_bracket = FALSE;        					//stdout redirection
   pid_t pid;
   while(TRUE){
-	  getcwd(cwd, sizeof(cwd));         //get current working directory 
+	  getcwd(cwd, sizeof(cwd));         			//get current working directory 
       printf("MyShell~%s: ", cwd);  
       
       bytesRead = getline(&inputCmd, &size, stdin); //get user input and the error code
@@ -41,20 +44,22 @@ int main()
       } else {                                      //user input scanner successful
           //printf("Before trim: %s\n", inputCmd);
           inputCmd = trim(inputCmd, ' ');
+          rmNewLine(inputCmd);
           //printf("After trim : %s\n", inputCmd);
           int a = countSpace(inputCmd, ' ');
           char* cmd[a];
           printf("size of input cmd array%d \n", a);
           parseCmd(inputCmd,cmd);
-      	
-      	  check(cmd, a, &valid, &bg, built_in);
-      	  if(valid){							//valid built_in cmd
-      	  	printf("I'm VALID BUILT_IN CMD\n");
-      	  	valid = FALSE;		//flip the flag to false for next read
-      	  	//call switch command
-      	  } else {								//not a built_in cmd
-      	  	printf("I'm INVALID BUILT_IN CMD\n");
+      	  	
+      	  int index = check(cmd, a, &valid, &bg, built_in);
+      	  if(valid  && index > -1){					//valid built_in cmd
+      	  	printf("I'm a VALID BUILT_IN CMD + index : %d\n", index);
+      	  	valid = FALSE;							//flip the flag to false for next read
+      	  	switchCmd(index+1, cmd);				//call switch command
+      	  } else {									//not a built_in cmd
+      	  	printf("I'm a INVALID BUILT_IN CMD\n");
       	  	launch(pid, cmd, &bg);
+      	  	
       	  	//fork the process and let the unix system handle it
       	  }
       	     
@@ -109,34 +114,47 @@ void parseCmd(char* input, char* arr[]){
    printf("\n");
 }
 
+void rmNewLine(char* str){
+	while(*str != '\0'){
+		if(*str == '\n')
+			*str = '\0';
+		str++;
+	}
+}
+
 //NOTE: Behavior of strcmp(input[0], built_in[i]) == 0) 
 //the newline is included in input[0] with getline where comparison is
 // "cd\n" == "cd" fails because newline
 // "cd " == "cd" works, adding space pads away the \n into separate argument
-//TODO: revisit in case it causes problems in the future   
-void check(char* input[], int size, int* valid, int* bg, char* built_in[]){
+int check(char* input[], int size, int* valid, int* bg, char* built_in[]){
 	printf("valid: %d\n background: %d\n", *valid, *bg);
 	printf("input cmd: %s\n", input[0]);
     //if the first argument is in the list of commands
     int i;
+    int index = -1;
     for(i = 0; strcmp(built_in[i],"\0") != 0; i++){
-    	printf("i'm in the loop: %s\n", built_in[i]);
+    	//printf("i'm in the loop: %s\n", built_in[i]);
     	if(strcmp(input[0], built_in[i]) == 0){
     		*valid = TRUE;
+    		index = i;
     		printf("condition is met\n");
     	}
-    	printf("difference comparator: %d\n", strcmp(input[0], built_in[i]));
+    	//printf("difference comparator: %d\n", strcmp(input[0], built_in[i]));
     } 
     printf("valid %d\n", *valid);
     //if last argument is ampersand
     if(*(input[size-1]) == '&'){
     	*bg = TRUE;
     } 
-    printf("last character: %s\n", input[size-1]);
-    printf("background: %d\n", *bg);
+    //printf("last character: %s\n", input[size-1]);
+    //printf("background: %d\n", *bg);
     // if anywhere there is a redirection for every odd argument (input/output)
     
-   
+   return index;
+}
+
+void switchCmd(int num, char* args[]){
+	
 }
 
 void launch(pid_t pid, char* args[], int* bg){
