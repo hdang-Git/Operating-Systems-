@@ -9,6 +9,8 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <fcntl.h>
+#include <errno.h>
 #include "utility.h"
 
 //function prototypes
@@ -19,6 +21,13 @@ void launch(pid_t, char*[], int*);
 int check(char*[], int, int*, int*, char*[]);
 void rmNewLine(char*);
 void switchCmd(int, char*[], int);
+char* checkRightRedirect(char*[], int, char*, int*, int*);
+char* checkLeftRedirect(char*[], int, char*, int*, int*);
+int writeToFile(char*, int, int);
+int readFromFile(char*, int, int);
+void restoreOutput(int);
+void restoreInput(int);
+char** parseRedirect(char*[], int, char*);
 
 int main()
 {
@@ -31,8 +40,14 @@ int main()
   char* built_in[] = {"cd", "clr", "dir", "environ", "echo", "help", "pause", "quit", "\0"}; 
   int valid = FALSE;								//valid command
   int bg = FALSE;									//background process
-  //int l_bracket = FALSE;							//stdin redirection
-  //int r_bracket = FALSE;        					//stdout redirection
+  char* outputName;									//output arg after >
+  char* inputName;									//input arg before <
+  int r = FALSE;        							//stdout redirection >
+  int rR = FALSE;									//stdout redirection >>
+  int l  = FALSE;									//stdin redirection  <
+  int lL = FALSE;									//stdout redirection <<
+  int saved_STDOUT;
+  int saved_STDINPUT;
   pid_t pid;
   while(TRUE){
 	  getcwd(cwd, sizeof(cwd));         			//get current working directory 
@@ -46,23 +61,60 @@ int main()
           inputCmd = trim(inputCmd, ' ');
           rmNewLine(inputCmd);
           //printf("After trim : %s\n", inputCmd);
-          int a = countSpace(inputCmd, ' ');
-          char* cmd[a];
-          printf("size of input cmd array%d \n", a);
+          int size = countSpace(inputCmd, ' ');
+          char* cmd[size];
+          printf("size of input cmd array%d \n", size);
           parseCmd(inputCmd,cmd);
-      	  
-      	  int index = check(cmd, a, &valid, &bg, built_in);
+      	 
+      
+      	  //Redirection Check
+      	  if(size > 2){ //at least 3 arguments total for redirection check
+       	  	outputName = checkRightRedirect(cmd, size, outputName, &r, &rR);
+       	  	inputName = checkLeftRedirect(cmd, size, inputName, &l, &lL);
+       	  	printf("outputName: %s\tinputName %s\n", outputName, inputName);
+      	  }
+      	  if(r || rR){
+   	   	  	saved_STDOUT = writeToFile(outputName, r, rR);
+            printf("output File Name %s\n", outputName);
+            
+      	  } 
+      	  if(l || lL){
+      	  	saved_STDINPUT = readFromFile(inputName, l, lL);
+      	  	printf("input File Name %s\n", inputName);
+      	  	
+      	  }
+
+      	  int index = check(cmd, size, &valid, &bg, built_in);
       	  if(valid  && index > -1){					//valid built_in cmd
       	  	printf("I'm a VALID BUILT_IN CMD + index : %d\n", index);
       	  	valid = FALSE;							//flip the flag to false for next read
-      	  	switchCmd(index+1, cmd, a);				//call switch command
+      	  	switchCmd(index+1, cmd, size);			//call switch command to call builtin func
       	  } else {									//not a built_in cmd
-      	  	printf("I'm a INVALID BUILT_IN CMD\n");
+      	  	printf("I'm an INVALID BUILT_IN CMD\n");
+      	  	/*
+      	  	if(r || rR || l || lL){
+      	  		cmd = parseRedirect(cmd, size);
+      	  	}
+      	  	*/
       	  	launch(pid, cmd, &bg);
       	  	
       	  	//fork the process and let the unix system handle it
       	  }
-      	     
+      	  
+      	        	  	
+      	  	if(r || rR){
+      	  		restoreOutput(saved_STDOUT);		//restore std_out
+      	  		printf("OUTPUT RESTORED!!!\n");
+      	  	}
+      	  	if(l || lL){
+      	  		restoreInput(saved_STDINPUT);		//restore std_in
+      	  		printf("INPUT RESTORED!!!\n");
+      	  	}
+      	  //flip the redirection flags
+      	  r = FALSE;
+      	  rR = FALSE;
+      	  l = FALSE;
+      	  lL = FALSE;   
       }
    }
 }
@@ -151,6 +203,95 @@ int check(char* input[], int size, int* valid, int* bg, char* built_in[]){
     // if anywhere there is a redirection for every odd argument (input/output)
     
    return index;
+}
+
+char* checkRightRedirect(char* args[], int size, char* output, int* right, int* rRight){
+	int i;
+	output = NULL;
+	for(i = 1; i < size - 1; i++){
+		if(strcmp(args[i], ">") == 0){
+			printf("Contains >\n");
+			output = args[i+1];  
+			*right = TRUE;
+			printf("Outputting to: %s\n", output);
+		} else if(strcmp(args[i], ">>") == 0){
+			printf("Contains >>\n");
+			output = args[i+1];
+			*rRight = TRUE;
+			printf("Outputting to: %s\n", output);
+		} 
+	}
+	return output;
+}
+
+char* checkLeftRedirect(char* args[], int size, char* input, int* left, int* lLeft){
+	int i;
+	input = NULL;
+	for(i = 1; i < size - 1; i++){
+		if(strcmp(args[i], "<") == 0){
+			printf("Contains <\n");
+			input = args[i+1];
+			*left = TRUE;
+			printf("Reading from: %s\n", input);
+		} else if(strcmp(args[i], "<<") == 0){
+			printf("Contains <<\n");
+			input = args[i+1];
+			*lLeft = TRUE;
+			printf("Reading from: %s\n", input);
+		}
+	}
+	return input;
+}
+
+char** parseRedirect(char* cmd[], int size, char* delim){
+	int i;
+	for(i = 0; i < size; i++){
+		if(strcmp(cmd[i], delim) == 0)
+			cmd[i] = "/0";		 
+	}
+	return cmd;
+}
+
+int writeToFile(char* fileName, int r, int rR){
+	int fd;
+	if(r){
+		if((fd = open(fileName, O_WRONLY|O_CREAT|O_TRUNC, 0666)) == -1){
+			printf("Error with '>' Redirection! %s\n", strerror(errno));
+		}
+    } else if(rR){
+      	if((fd = open(fileName, O_WRONLY|O_CREAT|O_APPEND, 0666)) == -1){
+      		printf("Error with '>>' Redirection! %s\n", strerror(errno));
+      	}  	
+    }
+	int saved_STDOUT = dup(1);
+	dup2(fd, STDOUT_FILENO);
+	return saved_STDOUT;
+}
+
+int readFromFile(char* fileName, int l, int lL){
+	int fd;
+	if(l){
+		if((fd = open(fileName, O_RDONLY, 0666)) == -1){
+			printf("Error with '<' Redirection! %s\n", strerror(errno));
+		}
+	} else if(lL){
+		if((fd = open(fileName, O_RDONLY, 0666)) == -1){
+			printf("Error with '<<' Redirection! %s\n", strerror(errno));
+		}
+	}
+	int saved_STDIN = dup(0);
+	dup2(fd, STDIN_FILENO);
+	return saved_STDIN;
+}
+
+void restoreOutput(int out){
+	dup2(out, 1);
+	close(out);
+}
+
+void restoreInput(int input){
+	dup2(input, 0);
+	close(input);
 }
 
 void switchCmd(int num, char* args[], int size){
