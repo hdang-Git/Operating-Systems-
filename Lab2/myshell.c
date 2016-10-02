@@ -18,7 +18,7 @@ int countSpace(char*,char);
 void launch(pid_t, char*[], int*);
 int check(char*[], int, int*, int*, char*[]);
 void rmNewLine(char*);
-void switchCmd(int, char*[]);
+void switchCmd(int, char*[], int);
 
 int main()
 {
@@ -50,12 +50,12 @@ int main()
           char* cmd[a];
           printf("size of input cmd array%d \n", a);
           parseCmd(inputCmd,cmd);
-      	  	
+      	  
       	  int index = check(cmd, a, &valid, &bg, built_in);
       	  if(valid  && index > -1){					//valid built_in cmd
       	  	printf("I'm a VALID BUILT_IN CMD + index : %d\n", index);
       	  	valid = FALSE;							//flip the flag to false for next read
-      	  	switchCmd(index+1, cmd);				//call switch command
+      	  	switchCmd(index+1, cmd, a);				//call switch command
       	  } else {									//not a built_in cmd
       	  	printf("I'm a INVALID BUILT_IN CMD\n");
       	  	launch(pid, cmd, &bg);
@@ -153,9 +153,9 @@ int check(char* input[], int size, int* valid, int* bg, char* built_in[]){
    return index;
 }
 
-void switchCmd(int num, char* args[]){
+void switchCmd(int num, char* args[], int size){
 	switch(num){
-		case 1	: 	my_cd(args);
+		case 1	: 	my_cd(args, size);
 					break;
 		case 2	:	my_clear();	
 					break;
@@ -165,7 +165,7 @@ void switchCmd(int num, char* args[]){
 					break;
 		case 5 	:	my_echo(args);
 					break;
-		case 6 	:	my_help();
+		case 6 	:	my_help(args, size);
 					break;
 		case 7	: 	my_pause();
 					break;
