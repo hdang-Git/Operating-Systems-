@@ -21,14 +21,14 @@ void launch(pid_t, char*[], int*);
 int check(char*[], int, int*, int*, char*[]);
 void rmNewLine(char*);
 void switchCmd(int, char*[], int);
-char* checkRightRedirect(char*[], int, char*, int*, int*);
-char* checkLeftRedirect(char*[], int, char*, int*, int*);
+void checkRedirect(char*[], int, int*, int*, int*, int*);
+char* getRedirectName(char*[], int, char*, int*, char*);
 int writeToFile(char*, int, int);
 int readFromFile(char*, int, int);
 void restoreOutput(int);
 void restoreInput(int);
-char** parseRedirect(char*[], int, char*);
-
+void parseRedirect(char*[], int, char*);
+void restore(int, int, int*, int*, int*, int*);
 int main()
 {
   char* inputCmd = NULL;
@@ -47,7 +47,7 @@ int main()
   int l  = FALSE;									//stdin redirection  <
   int lL = FALSE;									//stdout redirection <<
   int saved_STDOUT;
-  int saved_STDINPUT;
+  int saved_STDIN;
   pid_t pid;
   while(TRUE){
 	  getcwd(cwd, sizeof(cwd));         			//get current working directory 
@@ -69,21 +69,39 @@ int main()
       
       	  //Redirection Check
       	  if(size > 2){ //at least 3 arguments total for redirection check
-       	  	outputName = checkRightRedirect(cmd, size, outputName, &r, &rR);
-       	  	inputName = checkLeftRedirect(cmd, size, inputName, &l, &lL);
+      	  	checkRedirect(cmd, size, &r, &rR, &l, &lL);
+      	  	if(r){
+       	  		outputName = getRedirectName(cmd, size, outputName, &r, ">");
+       	  		parseRedirect(cmd, size, ">");
+       	  	}else if(rR){
+       	  		outputName = getRedirectName(cmd, size, outputName, &rR, ">>");
+       	  		parseRedirect(cmd, size, ">>");
+       	    }
+       	    if(l){
+       	    	inputName = getRedirectName(cmd, size, inputName, &l, "<");
+       	    	parseRedirect(cmd, size, "<");
+       	  		//inputName = checkLeftRedirect(cmd, size, inputName, &l, &lL);
+       	  	}else if(lL){
+       	  		inputName = getRedirectName(cmd, size, inputName, &lL, "<<");
+       	  		parseRedirect(cmd, size, "<<");
+       	  	}
        	  	printf("outputName: %s\tinputName %s\n", outputName, inputName);
       	  }
+      	  
+      	  //Open file and retrieve STDOUT
       	  if(r || rR){
    	   	  	saved_STDOUT = writeToFile(outputName, r, rR);
             printf("output File Name %s\n", outputName);
             
       	  } 
+      	  //Open file and retrieve STDIN
       	  if(l || lL){
-      	  	saved_STDINPUT = readFromFile(inputName, l, lL);
+      	  	saved_STDIN= readFromFile(inputName, l, lL);
       	  	printf("input File Name %s\n", inputName);
       	  	
       	  }
-
+      	  
+		  //Execute either built_in or non_builtins
       	  int index = check(cmd, size, &valid, &bg, built_in);
       	  if(valid  && index > -1){					//valid built_in cmd
       	  	printf("I'm a VALID BUILT_IN CMD + index : %d\n", index);
@@ -91,32 +109,31 @@ int main()
       	  	switchCmd(index+1, cmd, size);			//call switch command to call builtin func
       	  } else {									//not a built_in cmd
       	  	printf("I'm an INVALID BUILT_IN CMD\n");
-      	  	/*
-      	  	if(r || rR || l || lL){
-      	  		cmd = parseRedirect(cmd, size);
-      	  	}
-      	  	*/
-      	  	launch(pid, cmd, &bg);
-      	  	
       	  	//fork the process and let the unix system handle it
+      	  	launch(pid, cmd, &bg);
       	  }
-      	  
-      	        	  	
-      	  	if(r || rR){
-      	  		restoreOutput(saved_STDOUT);		//restore std_out
-      	  		printf("OUTPUT RESTORED!!!\n");
-      	  	}
-      	  	if(l || lL){
-      	  		restoreInput(saved_STDINPUT);		//restore std_in
-      	  		printf("INPUT RESTORED!!!\n");
-      	  	}
-      	  //flip the redirection flags
-      	  r = FALSE;
-      	  rR = FALSE;
-      	  l = FALSE;
-      	  lL = FALSE;   
+      	  //restore file descriptors and reset redirection operator flags
+      	  restore(saved_STDOUT, saved_STDIN, &r, &rR, &l, &lL); 
       }
    }
+}
+
+void restore(int saved_STDOUT, int saved_STDIN, int* r, int* rR, int* l, int* lL){
+	if(*r || *rR){
+  		restoreOutput(saved_STDOUT);		//restore STD_OUT
+  		printf("r: %d  rR: %d\n", *r, *rR);
+  		printf("OUTPUT RESTORED!!!\n");
+  	}
+   	if(*l || *lL){
+      	restoreInput(saved_STDIN);		//restore STD_IN
+      	printf("l: %d  lL: %d\n", *l, *lL);
+     	printf("INPUT RESTORED!!!\n");
+    }
+    //flip the redirection flags
+    *r = FALSE;
+    *rR = FALSE;
+    *l = FALSE;
+    *lL = FALSE;  
 }
 
 char* trim(char* input, char delim){
@@ -199,57 +216,50 @@ int check(char* input[], int size, int* valid, int* bg, char* built_in[]){
     	*bg = TRUE;
     } 
     //printf("last character: %s\n", input[size-1]);
-    //printf("background: %d\n", *bg);
-    // if anywhere there is a redirection for every odd argument (input/output)
-    
+    //printf("background: %d\n", *bg);    
    return index;
 }
 
-char* checkRightRedirect(char* args[], int size, char* output, int* right, int* rRight){
+
+void checkRedirect(char* args[], int size, int* r, int* rR, int* l, int* lL){
 	int i;
-	output = NULL;
 	for(i = 1; i < size - 1; i++){
 		if(strcmp(args[i], ">") == 0){
-			printf("Contains >\n");
-			output = args[i+1];  
-			*right = TRUE;
-			printf("Outputting to: %s\n", output);
+			*r = TRUE;
 		} else if(strcmp(args[i], ">>") == 0){
-			printf("Contains >>\n");
-			output = args[i+1];
-			*rRight = TRUE;
-			printf("Outputting to: %s\n", output);
-		} 
-	}
-	return output;
-}
-
-char* checkLeftRedirect(char* args[], int size, char* input, int* left, int* lLeft){
-	int i;
-	input = NULL;
-	for(i = 1; i < size - 1; i++){
-		if(strcmp(args[i], "<") == 0){
-			printf("Contains <\n");
-			input = args[i+1];
-			*left = TRUE;
-			printf("Reading from: %s\n", input);
+			*rR = TRUE;
+		} else if(strcmp(args[i], "<") == 0){
+			*l = TRUE;
 		} else if(strcmp(args[i], "<<") == 0){
-			printf("Contains <<\n");
-			input = args[i+1];
-			*lLeft = TRUE;
-			printf("Reading from: %s\n", input);
+			*lL = TRUE;
 		}
 	}
-	return input;
 }
 
-char** parseRedirect(char* cmd[], int size, char* delim){
+char* getRedirectName(char* args[], int size, char* fileName, int* pointer, char* delim){
+	int i;
+	fileName = NULL;
+	for(i = 1; i < size - 1; i++){
+		if(strcmp(args[i], delim) == 0){
+			printf("Contains %s\n", delim);
+			fileName = args[i+1];  
+			*pointer = TRUE;
+			if(strcmp(delim, ">") == 0 || strcmp(delim, ">>") == 0) 
+				printf("Outputting to: %s\n", fileName);
+			else {
+				printf("Reading from: %s\n", fileName);
+			}
+		} 
+	}
+	return fileName;
+}
+
+void parseRedirect(char* cmd[], int size, char* delim){
 	int i;
 	for(i = 0; i < size; i++){
 		if(strcmp(cmd[i], delim) == 0)
-			cmd[i] = "/0";		 
+			cmd[i] = NULL;		 
 	}
-	return cmd;
 }
 
 int writeToFile(char* fileName, int r, int rR){
