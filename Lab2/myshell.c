@@ -27,7 +27,9 @@ int writeToFile(char*, int, int);
 int readFromFile(char*, int, int);
 void restoreOutput(int);
 void restoreInput(int);
-void parseRedirect(char*[], int, char*);
+void cmdRedirect(char*[], int, int*, int*, int*, int*);
+//void parseRedirect(char*[], int, char*);
+int parseRedirect(char*[], int);
 void restore(int, int, int*, int*, int*, int*);
 int main()
 {
@@ -72,19 +74,21 @@ int main()
       	  	checkRedirect(cmd, size, &r, &rR, &l, &lL);
       	  	if(r){
        	  		outputName = getRedirectName(cmd, size, outputName, &r, ">");
-       	  		parseRedirect(cmd, size, ">");
+       	  		//parseRedirect(cmd, size, ">");
        	  	}else if(rR){
        	  		outputName = getRedirectName(cmd, size, outputName, &rR, ">>");
-       	  		parseRedirect(cmd, size, ">>");
+       	  		//parseRedirect(cmd, size, ">>");
        	    }
        	    if(l){
        	    	inputName = getRedirectName(cmd, size, inputName, &l, "<");
-       	    	parseRedirect(cmd, size, "<");
+       	    	//parseRedirect(cmd, size, "<");
        	  		//inputName = checkLeftRedirect(cmd, size, inputName, &l, &lL);
        	  	}else if(lL){
        	  		inputName = getRedirectName(cmd, size, inputName, &lL, "<<");
-       	  		parseRedirect(cmd, size, "<<");
+       	  		//parseRedirect(cmd, size, "<<");
        	  	}
+       	  	//cmdRedirect(cmd, size, &r, &rR, &l, &lL);
+       	  	size = parseRedirect(cmd, size);
        	  	printf("outputName: %s\tinputName %s\n", outputName, inputName);
       	  }
       	  
@@ -118,29 +122,11 @@ int main()
    }
 }
 
-void restore(int saved_STDOUT, int saved_STDIN, int* r, int* rR, int* l, int* lL){
-	if(*r || *rR){
-  		restoreOutput(saved_STDOUT);		//restore STD_OUT
-  		printf("r: %d  rR: %d\n", *r, *rR);
-  		printf("OUTPUT RESTORED!!!\n");
-  	}
-   	if(*l || *lL){
-      	restoreInput(saved_STDIN);		//restore STD_IN
-      	printf("l: %d  lL: %d\n", *l, *lL);
-     	printf("INPUT RESTORED!!!\n");
-    }
-    //flip the redirection flags
-    *r = FALSE;
-    *rR = FALSE;
-    *l = FALSE;
-    *lL = FALSE;  
-}
-
 char* trim(char* input, char delim){
 	//printf("initial length: %d\n", (int)strlen(input));
 	//remove leading whitespace
-	while(!isalnum(*input)){		//while first character is alphanumeric     
-		input++;					//TODO: change isalnum() to while *input == " " 
+	while(*input == delim){		     
+		input++;					//change !isalnum(*input) to while *input == " " 
 	}								//      if cmd args aren't alphanumeric
 	//printf("output: %s\n", input);
 	
@@ -253,7 +239,44 @@ char* getRedirectName(char* args[], int size, char* fileName, int* pointer, char
 	}
 	return fileName;
 }
+/*
+void cmdRedirect(char* cmd[], int size, int* r, int* rR, int* l, int* lL){
+    if(*r){
+    	parseRedirect(cmd, size, ">");
+    } else if(*rR){
+       	parseRedirect(cmd, size, ">>");
+    }
+    
+    if(*l){
+       	parseRedirect(cmd, size, "<");
+    }else if(*lL){
+       	parseRedirect(cmd, size, "<<");
+    }
+}
+*/
 
+
+int parseRedirect(char* cmd[], int size){
+	printf("In parseRedirect\n");
+	int i;
+	int j = 0;
+	char* arr[] = {"<", "<<", ">", ">>", "\0"};
+	for(i = 1; i < size - 1; i++){
+		printf("CMD: %s\n", cmd[i]);
+		while(strcmp(arr[j], "\0") != 0){
+			printf("i: %d j: %d diff: %d\n", i, j, strcmp(cmd[i],arr[j]));
+			if(strcmp(cmd[i], arr[j]) == 0){
+				cmd[i] = NULL;	
+				return i;
+			}
+			j++;
+		} 
+	}
+	printf("cmd[0] = %s***\n", cmd[0]);
+	printf("Success parsing redirect\n");
+}
+/*
+//get command by itself
 void parseRedirect(char* cmd[], int size, char* delim){
 	int i;
 	for(i = 0; i < size; i++){
@@ -261,7 +284,7 @@ void parseRedirect(char* cmd[], int size, char* delim){
 			cmd[i] = NULL;		 
 	}
 }
-
+*/
 int writeToFile(char* fileName, int r, int rR){
 	int fd;
 	if(r){
@@ -292,6 +315,24 @@ int readFromFile(char* fileName, int l, int lL){
 	int saved_STDIN = dup(0);
 	dup2(fd, STDIN_FILENO);
 	return saved_STDIN;
+}
+
+void restore(int saved_STDOUT, int saved_STDIN, int* r, int* rR, int* l, int* lL){
+	if(*r || *rR){
+  		restoreOutput(saved_STDOUT);		//restore STD_OUT
+  		printf("r: %d  rR: %d\n", *r, *rR);
+  		printf("OUTPUT RESTORED!!!\n");
+  	}
+   	if(*l || *lL){
+      	restoreInput(saved_STDIN);		//restore STD_IN
+      	printf("l: %d  lL: %d\n", *l, *lL);
+     	printf("INPUT RESTORED!!!\n");
+    }
+    //flip the redirection flags
+    *r = FALSE;
+    *rR = FALSE;
+    *l = FALSE;
+    *lL = FALSE;  
 }
 
 void restoreOutput(int out){
