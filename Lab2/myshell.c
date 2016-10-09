@@ -22,6 +22,8 @@
 
 
 //function prototypes
+void printPrompt();
+int verifyInput(char*);
 void parseCmd(char*, char*[]);
 char* trim(char*, char);
 int countSpace(char*,char);
@@ -33,6 +35,7 @@ void checkRedirect(char*[], int, int*, int*, int*, int*);
 char* getRedirectName(char*[], int, char*, int*, char*);
 int writeToFile(char*, int, int);
 int readFromFile(char*, int, int);
+void getPrevFD(int, int, int, int, int*, int*, char*, char*);
 void restoreOutput(int);
 void restoreInput(int);
 void cmdRedirect(char*[], int, int*, int*, int*, int*);
@@ -40,89 +43,73 @@ int parseRedirect(char*[], int);
 void restore(int, int, int*, int*, int*, int*);
 int checkPipe(char*[], int, int*, int*);
 int parsePipe(char*[], char*[], int, int, char*);
-void launchPipe(char*[], int, int, int);
+void launchPipe(pid_t, int[], char*[], int, int, int);
 void printArray(char*[], int, char*);
+char* getFileRedir(char*[], int, char*, int*, char*, int*, char*);
 
-
-int main()
+int main(int argc, char* argv[])
 {
+  if(argc > 1){
+     char* batchTrigger = argv[1];
+     char* batchName = argv[2];
+	 if(access(batchName, F_OK)){		//if a valid file type
+	 	
+	 }
+  }
   char* inputCmd = NULL;
-  int bytesRead; //# of bytes read from getline()
-  size_t size = 100;
-  
-  char cwd[1024];
+  int bytesRead; 									//# of bytes read from getline() func
+  size_t inSize = 100;								//size of input from getLine() func
   //List of commands
   char* built_in[] = {"cd", "clr", "dir", "environ", "echo", "help", "pause", "quit", "\0"}; 
   int valid = FALSE;								//valid command
-  int bg = FALSE;									//background process
-  int piping = FALSE;
-  char* outputName;									//output arg after >
-  char* inputName;									//input arg before <
-  int r = FALSE;        							//stdout redirection >
-  int rR = FALSE;									//stdout redirection >>
-  int l  = FALSE;									//stdin redirection  <
-  int lL = FALSE;									//stdout redirection <<
+  int bg = FALSE;									//background process flag
+  int piping = FALSE;								//piping flag
+  char* outputName;									//output arg after >, >>
+  char* inputName;									//input arg after <, <<
+  int r = FALSE;        							//stdout redirection flag > 
+  int rR = FALSE;									//stdout redirection flag >>
+  int l  = FALSE;									//stdin  redirection flag <
+  int lL = FALSE;									//stdin  redirection flag <<
   int saved_STDOUT;
   int saved_STDIN;
-  
   pid_t pid;
-  
+  //Loop forever until a break in the program
   while(TRUE){
-	  getcwd(cwd, sizeof(cwd));         			//get current working directory 
-	  printf(MAGENTA);
-      printf("MyShell~%s: ", cwd);  
-      printf(WHITE);
-      bytesRead = getline(&inputCmd, &size, stdin); //get user input and the error code
-      if(bytesRead == -1){
+  	  printPrompt();								//print current path in color
+      bytesRead = getline(&inputCmd,&inSize,stdin); //get user input and the error code
+      if(bytesRead == -1){							//if Error reading, send a error msg to user
           printf("Error! %d\n", bytesRead);	
+      } else if(verifyInput(inputCmd)){				//Do nothing
       } else {                                      //user input scanner successful
           //printf("Before trim: %s\n", inputCmd);
-          inputCmd = trim(inputCmd, ' ');
-          rmNewLine(inputCmd);
+          inputCmd = trim(inputCmd, ' ');			//get rid of leading & trailing spaces
+          rmNewLine(inputCmd);						//get rid of '\n' character
           //printf("After trim : %s\n", inputCmd);
-          int size = countSpace(inputCmd, ' ');
-          char* cmd[size];
+          int size = countSpace(inputCmd, ' ');		//count the # of args delimited by spaces
+          char* cmd[size];							//create array with size of # of args
           printf("size of input cmd array: %d \n", size);
-          parseCmd(inputCmd,cmd);
-      	  int pipeIndex;
-      	  int pipeCount;
+          parseCmd(inputCmd,cmd);					//parse input into each index of array cmd
+      	  int pipeIndex;							//stores index of first pipe
+      	  int pipeCount;							//stores number of pipes it encounters
       	  //Redirection Check
       	  if(size > 2){ //at least 3 arguments total for redirection & pipe check
-      	  	checkRedirect(cmd, size, &r, &rR, &l, &lL);
-      	  	pipeIndex = checkPipe(cmd, size, &piping, &pipeCount);
-      	  	printf("pipeIndex: %d   pipeCount: %d\n", pipeIndex, pipeCount);
+      	  	checkRedirect(cmd, size, &r, &rR, &l, &lL);				//check for Redirection
+      	  	pipeIndex = checkPipe(cmd, size, &piping, &pipeCount);	//check for pipes
+      	  	printf("pipeIndex: %d   pipeCount: %d\n", pipeIndex, pipeCount);	
       	  }
-      	  	
-      	  	
-      	  if(r || rR || l || lL){	
-      	  	if(r){
-       	  		outputName = getRedirectName(cmd, size, outputName, &r, ">");
-       	  	}else if(rR){
-       	  		outputName = getRedirectName(cmd, size, outputName, &rR, ">>");
-       	    }
-       	    if(l){
-       	    	inputName = getRedirectName(cmd, size, inputName, &l, "<");
-       	  	}else if(lL){
-       	  		inputName = getRedirectName(cmd, size, inputName, &lL, "<<");
-       	  	}
-       	  	size = parseRedirect(cmd, size);
-       	  	printf("outputName: %s\tinputName %s\n", outputName, inputName);
+      	  if(r || rR || l || lL){					//if any redirection symbols are used
+      	  	//Retrieve output file name if > or >> are used
+      	  	outputName = getFileRedir(cmd, size, outputName, &r, ">", &rR, ">>");
+      	  	//Retrieve input file name if < or << are used
+      	  	inputName = getFileRedir(cmd, size, outputName, &l, "<", &lL, "<<");
+      	  	//Parse the cmd array removing the redirection symbols and reset the size
+      	  	size = parseRedirect(cmd, size);	
+       	 	printf("outputName: %s\tinputName %s\n", outputName, inputName);
       	  }
-      	  
-      	  //Open file and retrieve STDOUT
-      	  if(r || rR){
-   	   	  	saved_STDOUT = writeToFile(outputName, r, rR);
-            printf("output File Name %s\n", outputName);
-            
-      	  } 
-      	  //Open file and retrieve STDIN
-      	  if(l || lL){
-      	  	saved_STDIN= readFromFile(inputName, l, lL);
-      	  	printf("input File Name %s\n", inputName);
-      	  	
-      	  }
+      	  //get and save the original file descriptors
+      	  getPrevFD(r, rR, l, lL, &saved_STDOUT, &saved_STDIN, outputName, inputName);
       	  printf("pipe flag: %d\n", piping);
-		  //Execute either built_in or non_builtins
+		  //Execute either built_in (> -1) or non_builtins (== -1)
       	  int index = check(cmd, size, &valid, &bg, built_in);
       	  if(valid  && index > -1){					//valid built_in cmd
       	  	printf("I'm a VALID BUILT_IN CMD + index : %d\n", index);
@@ -138,6 +125,31 @@ int main()
       	  piping = FALSE;
       }
    }
+}
+
+void printPrompt(){
+	char hostName[1024];
+	gethostname(hostName, sizeof(hostName));		//get host name
+	char cwd[1024];
+	getcwd(cwd, sizeof(cwd));         				//get current working directory 
+	printf(GREEN);
+	printf("\e[1m%s@%s\e[0m", getenv("LOGNAME"), hostName); //print login and host name in bold
+	printf(MAGENTA);
+    printf("\e[1m MyShell~%s:\e[0m ", cwd);  		//print directory in bold 
+    printf(WHITE);
+}
+
+//checks if contains delimiters or not. 
+int verifyInput(char* cmd){
+
+	int flag = TRUE;			//flag up for \n, ' ', etc. 
+	while(*(cmd) != '\0'){
+		if(isalpha(*(cmd))){	//if input contains alphanumeric, set flag down
+			flag = FALSE; 
+		}
+		*(cmd)++;
+	}
+	return flag;
 }
 
 char* trim(char* input, char delim){
@@ -240,6 +252,17 @@ void checkRedirect(char* args[], int size, int* r, int* rR, int* l, int* lL){
 	}
 }
 
+
+char* getFileRedir(char* cmd[], int size, char* fileName, 
+					int* a, char* symbolA, int* b, char* symbolB){
+	if(a){
+		fileName = getRedirectName(cmd, size, fileName, a, symbolA);
+	}else if(b){
+	  	fileName = getRedirectName(cmd, size, fileName, b, symbolB);
+	}
+	return fileName;
+}
+
 char* getRedirectName(char* args[], int size, char* fileName, int* pointer, char* delim){
 	int i;
 	fileName = NULL;
@@ -276,6 +299,21 @@ int parseRedirect(char* cmd[], int size){
 	}
 	printf("cmd[0] = %s***\n", cmd[0]);
 	printf("Success parsing redirect\n");
+}
+
+
+void getPrevFD(int r, int rR, int l, int lL, int* saved_STDOUT, int* saved_STDIN, 
+				   char* outputName, char* inputName){
+	//Open file and retrieve STDOUT
+    if(r || rR){
+   		*saved_STDOUT = writeToFile(outputName, r, rR);
+    	printf("output File Name %s\n", outputName);
+    } 
+    //Open file and retrieve STDIN
+    if(l || lL){
+     	*saved_STDIN= readFromFile(inputName, l, lL);
+      	printf("input File Name %s\n", inputName);	  	
+    }
 }
 
 int writeToFile(char* fileName, int r, int rR){
@@ -398,12 +436,14 @@ void launch(pid_t pid, char* args[], int* bg, int* piping, int indexP, int count
 	printf("BACKGROUND STATUS: %d\n", *bg);
 	pid = fork();									//fork the current process
 	int status;
+	pid_t pid2;
+	int pipefd[2];
 	if(pid == 0){
 		//printf("Child process with id %d. My parent is %d. \n", getpid(),  getppid());
 		if(*piping){									//if it is a pipe
 			printf("I'm piping! pipeflag: %d\n", *piping);
 			//*piping = FALSE;
-			launchPipe(args, indexP, countP, size);
+			launchPipe(pid2, pipefd, args, indexP, countP, size);
 		} else {
 			if(*bg)									//if background, pass only one arg, &
 				execlp(args[0], *args, NULL);
@@ -419,9 +459,18 @@ void launch(pid_t pid, char* args[], int* bg, int* piping, int indexP, int count
 		if(!(*bg)){									//if not background process, wait
 			printf("Not a background process\n");
 			//waitpid(pid, NULL, 0);				//Wait for child process to finish
-			if(waitpid(pid, &status, 0) < 0){
-				perror("PID ERROR\n");
-			} 
+			if(*piping){
+				printf("Parent WAITING! Piping: %d\n", *piping);
+
+				if(wait(NULL) < 0){
+					printf("Error with piping! %s\n", strerror(errno));
+				}
+				*piping = FALSE;
+			} else {
+				if(waitpid(pid, &status, 0) < 0){
+					perror("PID ERROR\n");
+				} 
+			}
 		} else {									//if background, don't wait
 			printf("I am a background process\n");
 			*bg = FALSE;
@@ -438,9 +487,8 @@ void printArray(char* arr[], int size, char* str){
 	printf("\n");
 }
 
-void launchPipe(char* args[], int index, int countPipe, int size){
+void launchPipe(pid_t pid2, int pipefd[], char* args[], int index, int countPipe, int size){
 	printf("in launchPipe() - index : %d    counter: %d    size: %d\n", index, countPipe, size); 
-	int pipefd[2];
 	int status;
 	char* output[index + 1];				//out i.e. ls 
 	char* input[size - (index+1) + 1];		//in  i.e. more
@@ -452,15 +500,15 @@ void launchPipe(char* args[], int index, int countPipe, int size){
 	printArray(input, inSize, "input");
 	
 	pipe(pipefd);
-	pid_t pid2 = fork();
+	pid2 = fork();
 	if(pid2 == 0){
 		//close(WRITE); 			//close write end of pipe (free fd 1)
 		printf("Child is reading from pipe\n");		
 		dup2(pipefd[0], 0);			//copy over read
 		close(pipefd[1]);
-		
 		execvp(input[0], input);	//takes in input and exec
-		exit(0); 
+		perror("Error piping for read end\n");
+		exit(1); 
 		
 	} else if(pid2 < 0){
 		perror("Error incorrect arguments\n");
@@ -472,6 +520,8 @@ void launchPipe(char* args[], int index, int countPipe, int size){
 		dup2(pipefd[1], 1);		   
 		close(pipefd[0]);
 		execvp(output[0], output); //pushes out output
+		perror("Error piping for write end\n");
+		exit(1);
 	}
 }
 
