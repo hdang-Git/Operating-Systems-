@@ -1,3 +1,8 @@
+/*
+ * This class file implements the function headers in utility.h. It has the implementations for 
+ * the built-in commands. 
+ */
+
 #include "utility.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,9 +13,19 @@
 #include <errno.h>
 
 
-
+/*********************************************************************************************
+ * This function changes the current directory to the new path if it can be found. If cd is  *
+ * called without any argument, then the current directory is printed out. No optional       *
+ * arguments are implemented.                                                                *
+ *                                                                                           *
+ * Preconditions:                                                                            *
+ * @params args[] - array storing the command and additional arguments                       *
+ * @params size - size of args[] array                                                       *
+ * Postconditions:                                                                           *
+ * @return void                                                                              *
+ *********************************************************************************************/
 void my_cd(char* args[], int size){
-	if(size > 1){ 								//if more than 1 argument excluding 'cd'
+	if(size > 1){ 								//if more than 1 argument excluding 'cd'then error
 		if(chdir(args[1]) != 0){
 		printf("Error! %s\n", strerror(errno));
 		} 
@@ -21,11 +36,23 @@ void my_cd(char* args[], int size){
 	}
 }
 
+/*********************************************************************************************
+ * This function clears the screen.                                                          *
+ *                                                                                           *
+ * Postconditions:                                                                           *
+ * @return void                                                                              *
+ *********************************************************************************************/
 void my_clear(){
-	printf("SUCCESS!\n");
+	printf("SUCCESS!\n");						//TODO: delete
 	system("clear");
 }
 
+/*********************************************************************************************
+ * This function lists the files in the current directory with error handling.               *
+ *                                                                                           *
+ * Postconditions:                                                                           *
+ * @return void                                                                              *
+ *********************************************************************************************/
 void my_dir(){
 	DIR *dp = NULL;
 	struct dirent *ep = NULL;
@@ -41,6 +68,12 @@ void my_dir(){
 	
 }
 
+/*********************************************************************************************
+ * This function lists the environment variables of the system.                              * 
+ *                                                                                           *
+ * Postconditions:                                                                           *
+ * @return void                                                                              *
+ *********************************************************************************************/
 void my_env(){
 	extern char **environ;
 	int i;
@@ -49,6 +82,14 @@ void my_env(){
 	}
 }
 
+/*********************************************************************************************
+ * This function echoes whatever arguments user writes to screen.                            *
+ *                                                                                           *
+ * Preconditions:                                                                            *
+ * @params args[] -  stores the command argument and additional arguments                    *
+ * Postconditions:                                                                           *
+ * @return void                                                                              *
+ *********************************************************************************************/
 void my_echo(char* args[]){
 	int i;
 	//printf("echo called, size of array passed: %ld\n", sizeof(args)/sizeof(args[0]));
@@ -59,7 +100,16 @@ void my_echo(char* args[]){
 
 }
 
-//TODO
+
+/*********************************************************************************************
+ * This function displays the help to console for the user for any of the built-in commands. *
+ *                                                                                           *
+ * Preconditions:                                                                            *
+ * @params args[] -  array storing the command and additional arguments                      *
+ * @params size - size of the args[] array                                                   *
+ * Postconditions:                                                                           *
+ * @return void                                                                              *
+ *********************************************************************************************/
 void my_help(char* args[], int size){
 	
 	printf("GNU bash, version 4.3.46(1)-release (x86_64-pc-linux-gnu) \n");
@@ -115,6 +165,12 @@ void my_help(char* args[], int size){
 	}
 }
 
+/*********************************************************************************************
+ * This function pauses the system until the ENTER key is pressed.                           *
+ *                                                                                           *
+ * Postconditions:                                                                           *
+ * @return void                                                                              *
+ *********************************************************************************************/
 void my_pause(){
 	do 
 	{
@@ -122,6 +178,13 @@ void my_pause(){
 	} while(getchar()!= '\n');
 }
 
+
+/*********************************************************************************************
+ * This function quits the shell program.                                                    *
+ *                                                                                           *
+ * Postconditions:                                                                           *
+ * @return void                                                                              *
+ *********************************************************************************************/
 void my_quit(){
 	exit(EXIT_SUCCESS);
 }

@@ -1,3 +1,6 @@
+/*
+ * This header file contains function declarations for the built-in commands. 
+ */
 #ifndef UTIL_H
 #define UTIL_H
 
