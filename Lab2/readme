@@ -1,0 +1,98 @@
+MYSHELL
+-------
+Date Last Updated: 10/10/16
+Author: Hai Dang
+
+Introduction
+------------
+This project implements a UNIX shell. Features that are supported 
+are built-in commands, batch processing, background processing, 
+I/O redirection, and inter-process communication.
+
+The UNIX shell is implemented in C and display to the terminal. 
+It can take in user input via keyboard or take in a batch file at 
+program execution. 
+
+
+Installation
+------------
+* None needed. Just compile the make file and run the executable 
+that is generated.
+* Command to compile
+	$ make
+* Command to delete all generated *.o files and shell executable
+	$ make remove
+* Command to run executable
+	$ ./myshell
+* Command to run executable with batch file
+	$ ./myshell <batch file name> 
+	
+
+Built-in Commands
+-----------------
+
+cd <directory> - 
+	* Changes the current default directory to <directory>. 
+	* If the <directory> argument is not present, the program   
+	  reports the current directory. 
+	* If the directory does not exist or an error occurs while 
+	  performing operations, the appropriate error is printed to console.
+clr  
+	* Clear the screen.
+dir <directory> - 
+	* List the contents of directory
+	* If directory encounters an error, the appropriate error is 
+	  printed to console.
+environ 
+	* List all the environment strings.
+echo <comment> 
+	* Display <comment> on the display followed
+  	  by a new line.
+help 
+	* Display the user manual to screen.
+pause 
+	* Pause operation of the shell until 'Enter' is
+	  pressed.
+quit 
+	* Quit the shell.
+
+
+Non-Built-in Commands 
+---------------------
+For non-built-in commands, consult the UNIX man pages.
+As for background processing, I/O redirection, and piping, consult 
+below.
+
+Background Processes Command
+----------------------------
+	If (&) is entered at the end of the command line, then the 
+process will execute the command and quickly return back to the console. 
+i.e.   firefox & 
+
+I/O Redirection Commands
+------------------------ 
+	Redirection is supported by using >, <, >>, or << redirection 
+operators. These will change the file descriptors from STDIN or STDOUT 
+respectively to the argument provided after the operator.
+
+The form is 
+	<command> <redirection operator> <file name>	
+	i.e.	ls -al > output.txt
+	i.e. sort < unsortedNum.txt > sorted.txt
+
+Note: 
+Currently, both input redirection operators do the same thing. Will be 
+changed in future builds.
+
+Piping Commands 
+---------------
+	Piping is supported so two commands can be piped together and 
+communicate where one pipe sends data to be read by another pipe.
+
+The form is
+	<command> | <command>
+	i.e. ls -al | more
+
+Note:
+At the moment, piping is only supported for two commands. N-piping is 
+not yet implemented.
