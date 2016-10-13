@@ -76,8 +76,7 @@ char* getFileRedir(char*[], int, char*, int*, char*, int*, char*);
  *********************************************************************************************/
 int main(int argc, char* argv[])
 {
-   if(argc > 1){									//TODO: restrict argc to 1 (argc == 1)
-  	  printf("batch file: %s\n", argv[1]);			//TODO: Delete printf() statement.
+   if(argc > 1){									
       char* batchName = argv[1];					//get the filename of the batch file
 	  if(access(batchName, F_OK) == 0){				//if a valid file type
 	 	 int lines = countLines(batchName);			//call countLines to return # of lines 
@@ -140,7 +139,6 @@ void executeBatch(char* inputCmd){
       	if(size > 2){ //at least 3 arguments total for redirection & pipe check
       		checkRedirect(cmd, size, &r, &rR, &l, &lL);				//check for Redirection
       	  	pipeIndex = checkPipe(cmd, size, &piping, &pipeCount);	//check for pipes
-      	  	printf("pipeIndex: %d   pipeCount: %d\n", pipeIndex, pipeCount);	//TODO: delete
       	}
       	if(r || rR || l || lL){						//if any redirection symbols are used
       	 	//Retrieve output file name if > or >> are used
@@ -149,25 +147,21 @@ void executeBatch(char* inputCmd){
       	  	inputName = getFileRedir(cmd, size, outputName, &l, "<", &lL, "<<");
       	  	//Parse the cmd array removing the redirection symbols and reset the size
       	  	size = parseRedirect(cmd, size);	
-       	 	printf("outputName: %s\tinputName %s\n", outputName, inputName);	//TODO: delete
       	}
       	//get and save the original file descriptors
       	getPrevFD(r, rR, l, lL, &saved_STDOUT, &saved_STDIN, outputName, inputName);
-      	printf("pipe flag: %d\n", piping);										//TODO: delete
+
 		//Execute either built_in (> -1) or non_builtins (== -1)
       	int index = check(cmd, size, &valid, &bg, built_in);
       	if(valid  && index > -1){					//valid built_in cmd
-      		printf("I'm a VALID BUILT_IN CMD + index : %d\n", index);			//TODO: delete
       	  	valid = FALSE;							//flip the flag to false for next read
       	  	switchCmd(index+1, cmd, size);			//call switch command to call builtin func
       	} else {									//not a built_in cmd
-      	  	printf("I'm an INVALID BUILT_IN CMD\n");							//TODO: delete
       	  	//fork the process and let the unix system handle it
       	  	launch(pid, cmd, &bg, &piping, pipeIndex, pipeCount, size);
       	}
       	//restore file descriptors and reset redirection operator flags
       	restore(saved_STDOUT, saved_STDIN, &r, &rR, &l, &lL); 
-      	piping = FALSE;													//TODO: move to launch
 	}
 }
 
@@ -212,20 +206,16 @@ void executeShell(){
           printf("Error! %d\n", bytesRead);	
       } else if(verifyInput(inputCmd)){				//Do nothing
       } else {                                      //user input scanner successful
-          //printf("Before trim: %s\n", inputCmd);
           inputCmd = trim(inputCmd, ' ');			//get rid of leading & trailing spaces
           rmNewLine(inputCmd);						//get rid of '\n' character
-          //printf("After trim : %s\n", inputCmd);
           int size = countSpace(inputCmd, ' ');		//count the # of args delimited by spaces
           char* cmd[size];							//create array with size of # of args
-          printf("size of input cmd array: %d \n", size);						//TODO: delete
           parseCmd(inputCmd,cmd);					//parse input into each index of array cmd
       	  
       	  //Redirection Check
       	  if(size > 2){ //at least 3 arguments total for redirection & pipe check
       	  	checkRedirect(cmd, size, &r, &rR, &l, &lL);				//check for Redirection
       	  	pipeIndex = checkPipe(cmd, size, &piping, &pipeCount);	//check for pipes
-      	  	printf("pipeIndex: %d   pipeCount: %d\n", pipeIndex, pipeCount);  	//TODO: delete	
       	  }
       	  if(r || rR || l || lL){					//if any redirection symbols are used
       	  	//Retrieve output file name if > or >> are used
@@ -234,25 +224,21 @@ void executeShell(){
       	  	inputName = getFileRedir(cmd, size, outputName, &l, "<", &lL, "<<");
       	  	//Parse the cmd array removing the redirection symbols and reset the size
       	  	size = parseRedirect(cmd, size);	
-       	 	printf("outputName: %s\tinputName %s\n", outputName, inputName);	//TODO: delete
       	  }
       	  //get and save the original file descriptors
       	  getPrevFD(r, rR, l, lL, &saved_STDOUT, &saved_STDIN, outputName, inputName);
-      	  printf("pipe flag: %d\n", piping);									//TODO: delete
+
 		  //Execute either built_in (> -1) or non_builtins (== -1)
       	  int index = check(cmd, size, &valid, &bg, built_in);
       	  if(valid  && index > -1){					//valid built_in cmd
-      	  	printf("I'm a VALID BUILT_IN CMD + index : %d\n", index);			//TODO: delete
       	  	valid = FALSE;							//flip the flag to false for next read
       	  	switchCmd(index+1, cmd, size);			//call switch command to call builtin func
       	  } else {									//not a built_in cmd
-      	  	printf("I'm an INVALID BUILT_IN CMD\n");							//TODO: delete
       	  	//fork the process and let the unix system handle it
       	  	launch(pid, cmd, &bg, &piping, pipeIndex, pipeCount, size);
       	  }
       	  //restore file descriptors and reset redirection operator flags
       	  restore(saved_STDOUT, saved_STDIN, &r, &rR, &l, &lL); 
-      	  piping = FALSE;										//TODO: move to launch
       }
    }
 }
@@ -287,7 +273,6 @@ void printPrompt(){
  * Postconditions:                                                                           *
  * @return the number of lines in the file                                                   *   
  *********************************************************************************************/
-
 int countLines(char* filename){
 	FILE* file;
 	file = fopen(filename, "r");			//Set file mode to read
@@ -296,7 +281,6 @@ int countLines(char* filename){
 	while(fgets(line, sizeof(line), file) != NULL){		//read in line & cont. until it isn't NULL
 		i++;								//Increment counter after each newline
 	}
-	printf("# of lines %d\n", i);			//TODO: delete printf() statement
 	fclose(file);							//Close filestream
 	return i;
 }
@@ -325,11 +309,6 @@ void readBatch(char* arr[], char* filename, int numLines){
 		arr[i] = malloc(strlen(line)+1);	//Allocate space in array index for each line
 		arr[i] = strdup(line);				//Copy over char array to array
 		i++;
-	}
-	
-	int j;
-	for(j = 0; j < numLines; j++){			//TODO: Delete printf() and loop structure
-		printf("%s", arr[j]);
 	}
 	fclose(file);							//Close filestream
 }
@@ -367,22 +346,18 @@ int verifyInput(char* cmd){
  * @return formatted string without trailing/leading delimiters                              *
  *********************************************************************************************/
 char* trim(char* input, char delim){
-	//printf("initial length: %d\n", (int)strlen(input));		//TODO: delete comment
 	//remove leading whitespace
 	while(*input == delim){		     			//Move from front to back of string 
 		input++;					 
 	}								
-	//printf("output: %s\n", input);							//TODO: delete comment
 	
 	//remove trailing whitespace
 	int length = strlen(input);
-	//printf("length: %d\n", length);							//TODO: delete comment
 	char* str = input + length - 1;
 	while(length > 0 && *input == delim){		//Move from back to front of string
 		str--;
 	}
 	*(str+1) = '\0';							//Add a null character at end
-	//printf("post length: %d\n", (int)strlen(input));			//TODO: delete comment
 	return input;
 }
 
@@ -443,12 +418,10 @@ void parseCmd(char* input, char* arr[]){
    i++;
    //Loop through all tokens with a space and aren't null
    while(token != NULL){
-   	   printf("%s\t", token);									//TODO: delete 
    	   token = strtok(NULL, delimiter);	
    	   arr[i] = token;
    	   i++;	
    }
-   printf("\n");												//TODO: delete
 }
 
 
@@ -466,30 +439,21 @@ void parseCmd(char* input, char* arr[]){
  * @return valid flag that tells if it is a builtin or not                                   *
  *********************************************************************************************/
 int check(char* input[], int size, int* valid, int* bg, char* built_in[]){
-	printf("valid: %d\n background: %d\n", *valid, *bg);						//TODO: delete
-	printf("input cmd: %s\n", input[0]);										//TODO: delete
-	
-
     int i;
     int index = -1;
     //Loop through builtins and compare against user input
     for(i = 0; strcmp(built_in[i],"\0") != 0; i++){
-    	//printf("i'm in the loop: %s\n", built_in[i]);							//TODO: delete
     	//if the first user argument is in the list of builtins
     	if(strcmp(input[0], built_in[i]) == 0){
     		*valid = TRUE;								//change flag to true for builtin
     		index = i;									//Retrieve index in built_in array 
-    		printf("condition is met\n");										//TODO: delete
     	}
-    	//printf("difference comparator: %d\n", strcmp(input[0], built_in[i])); //TODO: delete
     } 
-    printf("valid %d\n", *valid);												//TODO: delete
     //if last argument is ampersand set background flag to true
     if(*(input[size-1]) == '&'){
-    	*bg = TRUE;
+    	*bg = TRUE;									//Set background flag to true
+		input[size-1] = NULL; 						//Get rid of ampersand 
     } 
-    //printf("last character: %s\n", input[size-1]);							//TODO: delete
-    //printf("background: %d\n", *bg);    										//TODO: delete
    return index;
 }
 
@@ -569,15 +533,8 @@ char* getRedirectName(char* args[], int size, char* fileName, int* pointer, char
 	fileName = NULL;
 	for(i = 1; i < size - 1; i++){				//first and last redirection operator !exist 
 		if(strcmp(args[i], delim) == 0){		//match strings with operator
-			printf("Contains %s\n", delim);								//TODO: delete
 			fileName = args[i+1];  				//get filename after redirection operator
 			*pointer = TRUE;					//set redirection flag to true
-			
-			if(strcmp(delim, ">") == 0 || strcmp(delim, ">>") == 0) 	//TODO: delete if/else
-				printf("Outputting to: %s\n", fileName);				
-			else {
-				printf("Reading from: %s\n", fileName);
-			}
 		} 
 	}
 	return fileName;
@@ -595,14 +552,11 @@ char* getRedirectName(char* args[], int size, char* fileName, int* pointer, char
  * @return index of redirection operator                                                     *
  *********************************************************************************************/
 int parseRedirect(char* cmd[], int size){
-	printf("In parseRedirect\n");												//TODO: delete
 	int i;
 	int j = 0;
 	char* arr[] = {"<", "<<", ">", ">>", "\0"};	//array of redirection operators
 	for(i = 1; i < size - 1; i++){
-		printf("CMD: %s\n", cmd[i]);											//TODO: delete
 		while(strcmp(arr[j], "\0") != 0){
-			printf("i: %d j: %d diff: %d\n", i, j, strcmp(cmd[i],arr[j]));		//TODO: delete
 			if(strcmp(cmd[i], arr[j]) == 0){
 				cmd[i] = NULL;					//NULL out redirection operator
 				return i;
@@ -610,8 +564,6 @@ int parseRedirect(char* cmd[], int size){
 			j++;
 		} 
 	}
-	printf("cmd[0] = %s***\n", cmd[0]);											//TODO: delete
-	printf("Success parsing redirect\n");										//TODO: delete
 }
 
 
@@ -637,12 +589,10 @@ void getPrevFD(int r, int rR, int l, int lL, int* saved_STDOUT, int* saved_STDIN
 	//Open file and retrieve STDOUT
     if(r || rR){
    		*saved_STDOUT = writeToFile(outputName, r, rR);
-    	printf("output File Name %s\n", outputName);					//TODO: delete
     } 
     //Open file and retrieve STDIN
     if(l || lL){
      	*saved_STDIN= readFromFile(inputName, l, lL);
-      	printf("input File Name %s\n", inputName);	  					//TODO: delete
     }
 }
 
@@ -720,13 +670,9 @@ int readFromFile(char* fileName, int l, int lL){
 void restore(int saved_STDOUT, int saved_STDIN, int* r, int* rR, int* l, int* lL){
 	if(*r || *rR){
   		restoreOutput(saved_STDOUT);		//restore STD_OUT
-  		printf("r: %d  rR: %d\n", *r, *rR);						//TODO: delete
-  		printf("OUTPUT RESTORED!!!\n");							//TODO: delete
   	}
    	if(*l || *lL){
       	restoreInput(saved_STDIN);			//restore STD_IN
-      	printf("l: %d  lL: %d\n", *l, *lL);						//TODO: delete
-     	printf("INPUT RESTORED!!!\n");							//TODO: delete			
     }
     //flip the redirection flags
     *r = FALSE;
@@ -815,7 +761,6 @@ int parsePipe(char* cmd[], char* arr[], int start, int end, char* name){
 	int size = end - start;										//calculate size of array
 	for(i = start; i < end; i++){
 		arr[j] = cmd[i]; 										//copy over string
-		printf("Copying arr: %s %d %s\n", name, j, arr[j]);  		//TODO: delete
 		j++;
 	}
 	arr[j] = NULL;												//Null terminate array
@@ -875,22 +820,14 @@ void switchCmd(int num, char* args[], int size){
  * @return void                                                                              *
  *********************************************************************************************/
 void launch(pid_t pid, char* args[], int* bg, int* piping, int indexP, int countP, int size){
-	//pid_t wpid;
-	printf("BACKGROUND STATUS: %d\n", *bg);										//TODO: delete
 	pid = fork();									//fork the current process
 	int status;
 	pid_t pid2;
 	int pipefd[2];
 	if(pid == 0){
-		//printf("Child process with id %d. My parent is %d. \n", getpid(),  getppid()); 
 		if(*piping){									//if it is a pipe
-			printf("I'm piping! pipeflag: %d\n", *piping);						//TODO: delete
-			//*piping = FALSE;													//TODO: delete
 			launchPipe(pid2, pipefd, args, indexP, countP, size);	//call to pipe
 		} else {
-			if(*bg)									//if background, pass only one arg, &
-				execlp(args[0], *args, NULL);
-			printf("***Built_in: %s\n", args[0]);
 			execvp(args[0], args);					//else replace child with cmd with option args
 		}
 		exit(0);
@@ -898,23 +835,18 @@ void launch(pid_t pid, char* args[], int* bg, int* piping, int indexP, int count
 		perror("Error incorrect arguments\n");		//Print error message
         exit(-1);									//Indicate unsuccessful program termination
 	} else {
-	    //printf("Parent process with id %d my child is %d. \n", getpid(),  pid);
 		if(!(*bg)){									//if not background process, wait
-			printf("Not a background process\n");								//TODO: delete
-			//waitpid(pid, NULL, 0);				//Wait for child process to finish
-			if(*piping){
-				printf("Parent WAITING! Piping: %d\n", *piping);				//TODO: delete
-				if(wait(NULL) < 0){
+			if(*piping){							//if piping
+				if(wait(NULL) < 0){					//wait for all
 					printf("Error with piping! %s\n", strerror(errno));
 				}
-				*piping = FALSE;
+				*piping = FALSE;					//Set pipe flag to false
 			} else {
 				if(waitpid(pid, &status, 0) < 0){	//wait for child process to finish
 					perror("PID ERROR\n");
 				} 
 			}
 		} else {									//if background, don't wait
-			printf("I am a background process\n");								//TODO: delete
 			*bg = FALSE;
 		}
 	}
@@ -956,24 +888,16 @@ void printArray(char* arr[], int size, char* str){
  * Postconditions:                                                                           *
  * @return void                                                                              *
  *********************************************************************************************/
-//TODO: create a new method so piping doesn't have to be start at 1st argument
 void launchPipe(pid_t pid2, int pipefd[], char* args[], int index, int countPipe, int size){
-	printf("in launchPipe() - index : %d    counter: %d    size: %d\n", index, countPipe, size); 
 	int status;
 	char* output[index + 1];					//array that writes in pipe i.e. ls 
 	char* input[size - (index+1) + 1];			//array that read in pipe   i.e. more
-	printf("output pipe processing with size: %d\n", index);				//TODO: delete
 	int outSize = parsePipe(args, output, 0, index, "output");				
-	printf("input pipe processing with size: %d\n", (size-(index+1)));		//TODO: delete
 	int inSize = parsePipe(args, input, index+1, size, "input");			
-	printArray(output, outSize, "output");									//TODO: delete
-	printArray(input, inSize, "input");										//TODO: delete
 	
 	pipe(pipefd);
 	pid2 = fork();
 	if(pid2 == 0){
-		//close(WRITE); 						//close write end of pipe (free fd 1)
-		printf("Child is reading from pipe\n");								//TODO: delete
 		dup2(pipefd[0], 0);						//copy over read
 		close(pipefd[1]);
 		execvp(input[0], input);				//takes in input and exec
@@ -984,9 +908,6 @@ void launchPipe(pid_t pid2, int pipefd[], char* args[], int index, int countPipe
 		perror("Error incorrect arguments\n");
 		exit(-1);
 	} else {
-		//close read end and open write
-		//close(0);
-		printf("Writing to pipe!\n");										//TODO: delete
 		dup2(pipefd[1], 1);		   				//copy over write 
 		close(pipefd[0]);			
 		execvp(output[0], output); 				//pushes out output
