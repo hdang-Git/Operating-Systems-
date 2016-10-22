@@ -1,0 +1,11 @@
+ls -al
+ps
+ls | more
+dir
+help
+ps
+firefox &
+ps
+sort < unsorted.txt >> sorted.txt
+ls -al > output.txt
+ps >> output.txt
