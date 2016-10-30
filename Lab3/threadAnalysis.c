@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
+#include <semaphore.h>
 
 #define NUMTHREADS 9
 #define SIGTHREADS 3
@@ -32,55 +33,69 @@ pthread_t tid2[HANDLETHREADS];			//Handling threads for SIGUSR2
 pthread_t sid[SIGTHREADS];				//Signal Generating Threads
 int block[NUMTHREADS];
 
+volatile int sigSent1 = 0;
+volatile int sigSent2 = 0;
+volatile int sharedSignal = 0;
+volatile int sigReceive1 = 0; 
+volatile int sigReceive2 = 0;
 
-sig_atomic_t sigSent1 = 0;
-sig_atomic_t sigSent2 = 0;
-sig_atomic_t sharedSignal = 0;
-sig_atomic_t sigReceive1 = 0;
-sig_atomic_t sigReceive2 = 0;
+pthread_cond_t got_request1 = PTHREAD_COND_INITIALIZER; 
+pthread_cond_t got_request2 = PTHREAD_COND_INITIALIZER; 
 
-struct sigaction action;
-//TODO: add error handling
+pthread_mutex_t sigS1  = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t sigS2  = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t shared = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t sigR1  = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t sigR2  = PTHREAD_MUTEX_INITIALIZER;
+
 int main(){
 
 	int i;
 	srand(time(NULL));
-	
+
 	//Set up/Install signal handlers for SIGUSR1 & SIGUSR2
-	action.sa_flags = 0;
-	action.sa_handler = signalUser1;
-	sigaction(SIGUSR1, &action, (struct sigaction *)0);
-	action.sa_handler = signalUser2;
-	sigaction(SIGUSR2, &action, (struct sigaction *)0);
+	sigset_t mask;
+	/*
+	sigemptyset(&mask);
+	sigaddset(&mask, SIGUSR1);
+	sigaddset(&mask, SIGUSR2);
+	*/
+	sigfillset(&mask);
+	
+	pthread_sigmask(SIG_BLOCK, &mask, NULL); //BLOCK IT ALL 
+
 	int statSig, statH1, statH2;
 	int status[2];
 	
-	//Signal generating threads
-	for(i = 0; i < SIGTHREADS; i++){
-		statSig = pthread_create(&sid[i], NULL, sig_handler, NULL);
-		printf("signal generating thread %d created; Code_Stat: %d\n", i, statSig); 
-	}
 	
 	//Handling threads for SIGUSR1
 	for(i = 0; i < HANDLETHREADS; i++){
 		statH1 = pthread_create(&tid1[i], NULL, handler1, NULL); 
 		printf("handling thread SIGUSR1 %d created; Code_Stat: %d\n", i, statH1); 
 	}
-	
+
 	//Handling threads for SIGUSR2
 	for(i = 0; i < HANDLETHREADS; i++){
 		statH2 = pthread_create(&tid2[i], NULL, handler2, NULL); 
 		printf("handling thread SIGUSR2 %d created; Code_Stat: %d\n", i, statH2); 
 	}
-	
+
+	//Signal generating threads
+	for(i = 0; i < SIGTHREADS; i++){
+		statSig = pthread_create(&sid[i], NULL, sig_handler, NULL);
+		printf("signal generating thread %d created; Code_Stat: %d\n", i, statSig); 
+	}
+	sleep(3);
+
 	int joinSig, joinH1, joinH2;
+
 	//Wait on generating threads
 	for(i = 0; i < SIGTHREADS; i++){
 		 joinSig = pthread_join(sid[i], (void*) &status);
 		 printf("Join Sig: %d\n", joinSig);
 	}
 	printf("--Waiting on SIGS complete\n");
-	
+	sleep(3);
 	//Wait on threads for SIGUSR1
 	for(i = 0; i < HANDLETHREADS; i++){
 		pthread_join(tid1[i], (void*) &status);
@@ -100,13 +115,6 @@ int main(){
 	return 0;
 }
 
-void signalUser1(){
-	printf("\n*** SIGUSR1 recieved by TID(%lu) ***\n", pthread_self());
-}
-
-void signalUser2(){
-	printf("\n*** SIGUSR2 recieved by TID(%lu) ***\n", pthread_self());
-}
 
 float randNum(float start, float end){
 	float diff = end - start;	//assume end is bigger than start
@@ -121,85 +129,121 @@ int randBinary(){
 
 void* sig_handler(){
 	printf("\nSIGNAL GENERATOR CALLED - SID(%lu)\n", pthread_self());
-	int signo, num;
+	int signo, num, i;
+	
+	
 	while(sharedSignal < SIGCOUNT){
+		printf("shared signal: %d\n", sharedSignal);
 		signo = randBinary();
-		
 		if(signo == 0){ 		//signo == SIGUSR1
-			num = randBinary();
+			//for(i = 0; i < 2; i++){
+			num = rand() % 2;
 			printf("\tSIGNAL 1 is generated to array1[%d]\n", num);
-			if(pthread_kill(tid1[num], SIGUSR1) != 0){
+			if(pthread_kill(tid1[num], SIGUSR1) != 0){ //num was i
 				perror("SIGUSR1 ERROR\n");
 			}
+			
+			//sem_wait(&sigS1);
+			pthread_mutex_lock(&sigS1);
 			sigSent1++;
+			//sem_post(&sigS1);
+			pthread_mutex_unlock(&sigS1);
+			//}
 		} else {  //signo == SIGUSR2
+			//for(i = 0; i < 2; i++){
 			num = randBinary();
 			printf("\tSignal 2 is generated to array2[%d]\n", num);
 			if(pthread_kill(tid2[num], SIGUSR2) != 0){
 				perror("SIGUSR2 ERROR\n");
 			}
+			pthread_mutex_lock(&sigS2);
+			//sem_wait(&sigS2);
 			sigSent2++;
+			//sem_post(&sigS2);
+			pthread_mutex_unlock(&sigS2);
+			//}
+
 		}
+		
+		pthread_mutex_lock(&shared);
 		sharedSignal++;
-		sleep(randNum(0.1, 1));
+		pthread_mutex_unlock(&shared);
+			
+		//sleepMs(randNum(0.1, 1));
+		sleep(1);
 	}
 }
 
 void* handler1(){
-	printf("\n---HANDLER 1 CALLED---\n");
+	printf("\n---HANDLER 1 CALLED--- %lu\n", pthread_self());
 	siginfo_t info;
 	int x;
 	int rc;
+	int sig;
+	struct timespec timeout;
+	sigset_t mask, sigmask;
+	
+	//block all signals
 	/*
-	struct sigaction s;
-	s.sa_flags = 0;
-	s.sa_handler = SIG_IGN;
+	sigfillset(&mask); 
+	x = pthread_sigmask(SIG_BLOCK, &mask, NULL);
+	printf("%s\tReturned SIGUSR1 mask %d\n%s", BLUE, x, WHITE);
 	*/
-	sigemptyset(&action.sa_mask);
-	sigaddset(&action.sa_mask, SIGUSR2);		//Block SIGUSR2
-	//sigaction(SIGUSR1, &s, NULL);
-	while(1){
-		x = pthread_sigmask(SIG_BLOCK, &action.sa_mask, NULL);
-		printf("%s\tReturned SIGUSR1 mask %d\n%s", BLUE, x, WHITE);
+	//build different signal set to wait on sigusr1 
+	sigemptyset(&sigmask);
+	sigaddset(&sigmask, SIGUSR1);
+	timeout.tv_sec = 3;
+	timeout.tv_nsec = 0;
+	while((rc = sigtimedwait(&sigmask, NULL, &timeout)) > 0){
+		printf("SUCCESS! %lu\n", pthread_self());
+		pthread_mutex_lock(&sigR1);	
 		sigReceive1++;
 		printf("%s---SIGUSR1 Received Count: %d\n%s", BLUE, sigReceive1, WHITE);
-		int sig;
-		if((rc = sigwaitinfo(&action.sa_mask, &info)) <= 0){
-			fprintf(stderr,"%sERROR SIGWAITINFO() 1!%s %d %s\n", RED, WHITE, rc, 
-					strerror(errno));
-		}else {
-			fprintf(stdout,"SUCCESS!!!!!\n");
-		}
+		//int c = pthread_cond_signal(&got_request1); 
+		pthread_mutex_unlock(&sigR1);
+
 	}	
+	if(rc  <= 0){
+		fprintf(stderr,"%sERROR SIGWAIT() 1!%s %d %s tid[%lu]\n", RED, WHITE, rc, 
+				strerror(errno), pthread_self());
+	}
+	pthread_sigmask(SIG_UNBLOCK, &mask, NULL);
 }
 
 void* handler2(){
-	printf("\n---HANDLER 2 CALLED---\n");
+	printf("\n---HANDLER 2 CALLED---%lu\n", pthread_self());
 	siginfo_t info;
 	int x;
 	int rc;
+	struct timespec timeout;
+	sigset_t mask, sigmask;
 	/*
-	struct sigaction s;
-	s.sa_flags = 0;
-	s.sa_handler = SIG_IGN;
+	//block all signals
+	sigfillset(&mask); 
+	x = pthread_sigmask(SIG_BLOCK, &mask, NULL);
+	printf("%s\tReturned SIGUSR2 mask %d\n%s", GREEN, x, WHITE);
 	*/
-	sigemptyset(&action.sa_mask);
-	sigaddset(&action.sa_mask, SIGUSR1);		//Block SIGUSR1
-	//sigaction(SIGUSR2, &s, NULL);
+	//build different signal set to wait on sigusr2 
+	sigemptyset(&sigmask);
+	sigaddset(&sigmask, SIGUSR2);
 
-	while(1){
-		x = pthread_sigmask(SIG_BLOCK, &action.sa_mask, NULL);
-		printf("%s\tReturned SIGUSR2 mask %d\n%s", GREEN, x, WHITE);
+	
+	timeout.tv_sec = 3;
+	timeout.tv_nsec = 0;
+	while((rc = sigtimedwait(&sigmask, NULL, &timeout)) > 0){
+		printf("SUCCESS! %lu\n", pthread_self());
+		pthread_mutex_lock(&sigR2);
 		sigReceive2++;
 		printf("%s---SIGUSR2 Received Count: %d\n%s", GREEN, sigReceive2, WHITE);
-		int sig;
-		if((rc = sigwaitinfo(&action.sa_mask, &info)) <= 0){
-			fprintf(stderr,"%sERROR SIGWAITINFO() 2!%s %d %s\n", RED, WHITE, rc, 
-					strerror(errno));
-		} else {
-			fprintf(stdout,"SUCCESS!!!!!\n");
-		}
+		//int c = pthread_cond_signal(&got_request2); 
+		pthread_mutex_unlock(&sigR2);
 	}	
+	
+	if(rc <= 0){
+			fprintf(stderr,"%sERROR SIGWAIT() 2!%s %d %s tid[%lu]\n", RED, WHITE, rc, 
+					strerror(errno), pthread_self());
+	} 
+	pthread_sigmask(SIG_UNBLOCK, &mask, NULL);
 }
 
 
