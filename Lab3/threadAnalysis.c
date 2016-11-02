@@ -68,14 +68,14 @@ int main(){
 	//Either block SIGUSR1 & SIGUSR2 from main thread by blocking everything or install 
 	//signal handlers for it.
 	//Signal handlers will be overridden in individual threads
-	
+	/*
 	struct sigaction action;
 	action.sa_flags = 0;
 	action.sa_handler = signalUser1;
 	sigaction(SIGUSR1, &action, NULL);
 	action.sa_handler = signalUser2;
 	sigaction(SIGUSR2, &action, NULL);
-	
+	*/
 	/*
 	signal(SIGUSR1, signalUser1);
 	signal(SIGUSR2, signalUser2);
@@ -87,6 +87,11 @@ int main(){
 	sigfillset(&mask);
 	pthread_sigmask(SIG_BLOCK, &mask, NULL); //BLOCK IT ALL 
 	*/
+	sigset_t mask;
+	sigaddset(&mask, SIGUSR1);
+	sigaddset(&mask, SIGUSR2);
+	pthread_sigmask(SIG_BLOCK, &mask, NULL); //BLOCK SIGUSR1, SIGUSR2 in all threads 
+
 	//Reporting thread
 	statR = pthread_create(&rid, NULL, reporter, NULL);
 	printf("reporting thread created; Code_Stat: %d\n", statR);
@@ -240,8 +245,7 @@ void* handler1(){
 	printf("%s\tReturned SIGUSR1 mask %d\n%s", BLUE, x, WHITE);
 	*/
 	//build different signal set to wait on sigusr1 
-	sigfillset(&mask); 
-	pthread_sigmask(SIG_BLOCK, &mask, NULL);
+
 	sigemptyset(&sigmask);
 	sigaddset(&sigmask, SIGUSR1);
 	while((rc = sigtimedwait(&sigmask, NULL, &timeout)) > 0){
@@ -253,11 +257,11 @@ void* handler1(){
 		pthread_mutex_unlock(&sigR1);
 
 	}	
-	if(rc  <= 0){
+	if(sharedSignal < SIGCOUNT && rc  <= 0){
 		fprintf(stderr,"%sERROR SIGWAIT() 1!%s %d %s tid[%lu]\n", RED, WHITE, rc, 
 				strerror(errno), pthread_self());
 	}
-	pthread_sigmask(SIG_UNBLOCK, &mask, NULL);
+
 }
 
 //TODO: reexamine pthread_sigmask - might not be doing anything
@@ -276,8 +280,8 @@ void* handler2(){
 	printf("%s\tReturned SIGUSR2 mask %d\n%s", GREEN, x, WHITE);
 	*/
 	//build different signal set to wait on sigusr2 
-	sigfillset(&mask); 
-	pthread_sigmask(SIG_BLOCK, &mask, NULL);
+
+
 	sigemptyset(&sigmask);
 	sigaddset(&sigmask, SIGUSR2);
 	
@@ -290,11 +294,11 @@ void* handler2(){
 		pthread_mutex_unlock(&sigR2);
 	}	
 	
-	if(rc <= 0){
+	if(sharedSignal < SIGCOUNT && rc <= 0){
 		fprintf(stderr,"%sERROR SIGWAIT() 2!%s %d %s tid[%lu]\n", RED, WHITE, rc, 
 			strerror(errno), pthread_self());
 	} 
-	pthread_sigmask(SIG_UNBLOCK, &mask, NULL);
+
 }
 
 void* reporter(){
@@ -308,19 +312,19 @@ void* reporter(){
 	timeout.tv_sec = 3;
 	timeout.tv_sec = 0;
 	
-	pthread_sigmask(SIG_BLOCK, &mask, NULL);
+
 	gettimeofday(&t1, NULL);			    //get the end time in microseconds
 	gettimeofday(&t2, NULL);			    //get the end time in microseconds
 	int rc;
 	long int difference1, difference2, sum1 = 0, sum2 = 0;
 	start1 = t1.tv_sec * 1000000L + t1.tv_usec;  //Convert s & us to us
 	start2 = t2.tv_sec * 1000000L + t2.tv_usec;  //Convert s & us to us
-	while(sharedSignal <= SIGCOUNT - 1){
+	while(sharedSignal < SIGCOUNT){
 		rc = sigwait(&sigmask, &sig);
 		printf("In reporter\n");
 		if(sig == SIGUSR1){
 		//Lock 1
-			pthread_mutex_lock(&reportR1);
+			pthread_mutex_lock(&sigR1);
 			gettimeofday(&t1, NULL);			    //get the end time in microseconds
 			
 			printf("start1 time: %ld\n", start1);
@@ -335,10 +339,10 @@ void* reporter(){
 			
 			//store old time into start time
 			start1 = end1;
-			pthread_mutex_unlock(&reportR1);
+			pthread_mutex_unlock(&sigR1);
 		} else if (sig == SIGUSR2){
 			//Lock 2
-			pthread_mutex_lock(&reportR2);
+			pthread_mutex_lock(&sigR2);
 			gettimeofday(&t2, NULL);			    //get the end time in microseconds
 			
 			printf("start2 time: %ld\n", start2);
@@ -353,18 +357,24 @@ void* reporter(){
 			
 			//store old time into start time
 			start2 = end2;
-			pthread_mutex_unlock(&reportR2);
+			pthread_mutex_unlock(&sigR2);
 		} 
 		else if(rc <= 0){
 			fprintf(stderr,"%sERROR SIGWAIT() REPORTER!%s %d %s tid[%lu]\n", RED, WHITE, rc, 
 					strerror(errno), pthread_self());
 		} 
+		//For every ten signals, report the message
+		if((sharedSignal+1)%10 == 0){
+			char* msg = "Hello\n";
+			write(STDOUT_FILENO, msg, strlen(msg));
+		}
+		
 		if(sharedSignal == SIGCOUNT-1)
 			break;
 		
 	}
 	
-	pthread_sigmask(SIG_UNBLOCK, &mask, NULL);
+
 	
 }
 
