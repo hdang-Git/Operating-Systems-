@@ -1,3 +1,13 @@
+/*
+ * This program implements multithreading and signal handling where the count 
+ * and time between sent and received thread-directed signals are measured and 
+ * then printed to both console and csv file.  
+ *
+ *		Note: 
+ *			sample cmd to run after creating make file-
+ *				Ex.		./threadA
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
@@ -7,7 +17,6 @@
 #include<sys/time.h>
 #include <errno.h>
 #include <string.h>
-#include <semaphore.h>
 
 #define NUMTHREADS 9
 #define SIGTHREADS 3
@@ -39,13 +48,11 @@ volatile int sigSent2 = 0;				//Counter for total sent SIGUSR2 signals
 volatile int sharedSignal = 0;			//Counter for total signals sent
 volatile int sigReceive1 = 0; 			//Counter for total received SIGUSR1 signals
 volatile int sigReceive2 = 0;			//Counter for total received SIGUSR2 signals
-volatile int flag = 0;
+volatile int flag = 0;					//Boolean Flag for when certain # of signals gen.
+volatile int total = 0;					//Counter for total received in reporter
+volatile int count1 = 0;				//Counter for received SIGUSR1 in reporter
+volatile int count2 = 0;				//Counter for received SIGUSR2 in reporter
 
-volatile int loc_sigReceive1 = 0; 			//Counter for received SIGUSR1 signals
-volatile int loc_sigReceive2 = 0;			//Counter for received SIGUSR2 signals
-volatile int total = 0;
-volatile int count1 = 0;
-volatile int count2 = 0;
 //Mutexes
 pthread_mutex_t sigS1  = PTHREAD_MUTEX_INITIALIZER;		
 pthread_mutex_t sigS2  = PTHREAD_MUTEX_INITIALIZER;		
@@ -53,13 +60,23 @@ pthread_mutex_t shared = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t sigR1  = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t sigR2  = PTHREAD_MUTEX_INITIALIZER;
 
-struct timeval t1;
-struct timeval t2;
+struct timeval t1;					//time struct for SIGUSR1 Threads
+struct timeval t2;					//time struct for SIGUSR2 Threads
 static long int start1;				//Start time for SIGUSR1 received
 static long int start2;				//Start time for SIGUSR2 received
 static long int end1;				//End time for SIGUSR1 received
-static long int end2;				//Ene time for SIGUSR2 received
+static long int end2;				//End time for SIGUSR2 received
 
+
+/*********************************************************************************************
+ * The main functions blocks SIGUSR1 and SIGUSR2 signals in the singular process. It then    *
+ * creates the reporter, handler, and signal generator threads which will all inherit the    *
+ * blocked signal set. After thread creation, they are respectively joined when the threads  *
+ * have generated the desired number of signals.										     * 
+ *															                                 *
+ * Preconditions:                                                                            *
+ * None                                                                                      *
+ *********************************************************************************************/
 int main(){
 	int i;
 	srand(time(NULL));
@@ -123,28 +140,53 @@ int main(){
 			i, strerror(errno));
 		}
 	}
+	printf("--Waiting on HANDLE2 complete\n");
 	//Wait on Reporter thread
 	if(pthread_join(rid, (void*) &status) != 0){
 		perror("Error Joining Reporter Thread.\n");
 	}
-
-	
-	printf("--Waiting on HANDLE2 complete\n\n");
+	printf("--Waiting on Reporter complete\n\n");
+	printf("Signal Sent 1: %d\n", sigSent1);
+	printf("Signal Sent 2: %d\n", sigSent2);
+	printf("Signal Received 1: %d\n", sigReceive1);
+	printf("Signal Received 2: %d\n\n", sigReceive2);
 	return 0;
 }
 
-
+/*********************************************************************************************
+ * This function returns a random float number between two passed in numbers.                *
+ *                                                                                           *
+ * Preconditions:                                                                            *
+ * @params start - starting number                                                           *
+ * @params end- ending number                                                                *
+ * Postconditions:                                                                           *
+ * @return random float between start and end numbers entered inclusive                      *
+ *********************************************************************************************/
 float randNum(float start, float end){
 	float diff = end - start;	//assume end is bigger than start
 	float random = (float)rand()/(float)(RAND_MAX) * diff + start;
 	return random;
 }
 
+/*********************************************************************************************
+ * This function creates a random binary number                                              *
+ *                                                                                           *
+ * Postconditions:                                                                           *
+ * @return random binary number 0 or 1                                                       *
+ *********************************************************************************************/
 int randBinary(){
 	return rand() % 2;
 }
 
-
+/*********************************************************************************************
+ * This function generates SIGUSR1 or SIGUSR2 signals to specific threads with a call to     *  
+ * pthread_kill().  It then increments the respective sent counters along with a total       *
+ * counter. For every 10 signals, a flag is raised to true to signal the reporter thread to  *
+ * print.                                                                                    *
+ *                                                                                           *
+ * Postconditions:                                                                           *
+ * @return void                                                                              *
+ *********************************************************************************************/
 void* sig_handler(){
 	int signo, num;
 	//Loop as long as the signal count is less than the specified SIGCOUNT
@@ -155,7 +197,7 @@ void* sig_handler(){
 		if(signo == 0){ 		//signo == SIGUSR1
 			num = rand() % 2;
 			//Send signal to random handler thread for SIGUSR1
-			if(pthread_kill(tid1[num], SIGUSR1) != 0){ 
+			if(pthread_kill(tid1[num], SIGUSR1) < 0){ 
 				perror("SIGUSR1 ERROR\n");
 			}
 			//Send SIGUSR1 signal to reporter thread
@@ -171,7 +213,7 @@ void* sig_handler(){
 			//Randomly choose a random number to choose a signal
 			num = randBinary();	
 			//Send signal to random handler thread for SIGUSR2
-			if(pthread_kill(tid2[num], SIGUSR2) != 0){
+			if(pthread_kill(tid2[num], SIGUSR2) < 0){
 				perror("SIGUSR2 ERROR\n");
 			}
 			//Send SIGUSR2 signal to reporter thread
@@ -195,13 +237,15 @@ void* sig_handler(){
 	}
 }
 
-
+/*********************************************************************************************
+ * This function handles pending SIGUSR1 signals. Once a signal is removed from pending set  *
+ * of signals, its respective counter is incremented.                                        *
+ *                                                                                           *
+ * Postconditions:                                                                           *
+ * @return void                                                                              *
+ *********************************************************************************************/
 void* handler1(){
-	printf("\n---HANDLER 1 CALLED--- %lu\n", pthread_self());
-	siginfo_t info;
-	int x;
 	int rc;
-	int sig;
 	sigset_t sigmask;
 	timeout.tv_sec = 0;
 	timeout.tv_nsec = 3;
@@ -210,29 +254,32 @@ void* handler1(){
 	sigemptyset(&sigmask);
 	sigaddset(&sigmask, SIGUSR1);
 	while((rc = sigtimedwait(&sigmask, NULL, &timeout)) > 0){
-		printf("SUCCESS! %lu\n", pthread_self());
 		pthread_mutex_lock(&sigR1);	
 		sigReceive1++;
-		loc_sigReceive1++;
-		if(sigReceive1 > SIGNUM)
-			loc_sigReceive1 = 0;
-		printf("%s---SIGUSR1 Received Count: %d\n%s", BLUE, sigReceive1, WHITE);
+		//printf("%s---SIGUSR1 Received Count: %d\n%s", BLUE, sigReceive1, WHITE);
 		pthread_mutex_unlock(&sigR1);
 
 	}	
 	if(sharedSignal < SIGCOUNT && rc  <= 0){
-		fprintf(stderr,"%sERROR SIGWAIT() 1!%s %d %s tid[%lu]\n", RED, WHITE, rc, 
-				strerror(errno), pthread_self());
+		perror("Handler 1: Error with SIGTIMEDWAIT()\n");
+		/*fprintf(stderr,"%sERROR SIGWAIT() 1!%s %d %s tid[%lu]\n", RED, WHITE, rc, 
+				strerror(errno), pthread_self());*/
 	}
 
 }
 
-
+/*********************************************************************************************
+ * This function handles pending SIGUSR2 signals. Once a signal is removed from pending set  *
+ * of signals, its respective counter is incremented.                                        *
+ *                                                                                           *
+ * Postconditions:                                                                           *
+ * @return void                                                                              *
+ *********************************************************************************************/
 void* handler2(){
 	int rc;
+	sigset_t sigmask;
 	timeout.tv_sec = 0;
 	timeout.tv_nsec = 3;
-	sigset_t sigmask;
 
 	//build different signal set to wait on sigusr2 
 	sigemptyset(&sigmask);
@@ -241,20 +288,27 @@ void* handler2(){
 	while((rc = sigtimedwait(&sigmask, NULL, &timeout)) > 0){
 		pthread_mutex_lock(&sigR2);
 		sigReceive2++;
-		loc_sigReceive2++;
-		if(sigReceive1 > SIGNUM)
-			loc_sigReceive2 = 0;
-		printf("%s---SIGUSR2 Received Count: %d\n%s", GREEN, sigReceive2, WHITE);
+		//printf("%s---SIGUSR2 Received Count: %d\n%s", GREEN, sigReceive2, WHITE);
 		pthread_mutex_unlock(&sigR2);
 	}	
 	
 	if(sharedSignal < SIGCOUNT && rc <= 0){
-		fprintf(stderr,"%sERROR SIGWAIT() 2!%s %d %s tid[%lu]\n", RED, WHITE, rc, 
-			strerror(errno), pthread_self());
+		perror("Handler 2: Error with SIGTIMEDWAIT()\n");
+		/*fprintf(stderr,"%sERROR SIGWAIT() 2!%s %d %s tid[%lu]\n", RED, WHITE, rc, 
+			strerror(errno), pthread_self());*/
 	} 
 
 }
-
+/*********************************************************************************************
+ * This function prints out a report of the average times of receiving SIGUSR1 signals and   * 
+ * SIGUSR2 signals respectively for every ten iterations signified by the flag variable.     *
+ * Once the thread prints out the report to console with timestamp, global counters, and     *
+ * averages, the average times are then appended to a csv file.                              *
+ *                                                                                           *
+ *                                                                                           *
+ * Postconditions:                                                                           *
+ * @return void                                                                              *
+ *********************************************************************************************/
 void* reporter(){
 	int sig, rc;
 	long int difference1, difference2, sum1 = 0, sum2 = 0;
@@ -262,7 +316,8 @@ void* reporter(){
 	//Get current datetime
 	time_t dateTime;
 	dateTime = time(NULL);
-	
+	FILE* fd;
+	char* fileName = "AvgTimes.csv";
 	//Create signal set to wait on both SIGUSR1 and SIGUSR2 
 	sigset_t sigmask;
 	sigemptyset(&sigmask);
@@ -275,8 +330,8 @@ void* reporter(){
 	start2 = t2.tv_sec * 1000000L + t2.tv_usec;  //Convert s & us to us
 	//Loop while the signal count is less than the specified total count 
 	while(sharedSignal < SIGCOUNT){
-		rc = sigwait(&sigmask, &sig);
-		if(sig == SIGUSR1){
+		rc = sigwait(&sigmask, &sig);	//retrieve signal number 
+		if(sig == SIGUSR1){				//if signal number equals SIGUSR1
 			//Lock 1
 			pthread_mutex_lock(&sigR1);
 			//get the end time in microseconds
@@ -293,7 +348,7 @@ void* reporter(){
 			count1++;
 			total++;
 			pthread_mutex_unlock(&sigR1);
-		} else if (sig == SIGUSR2){
+		} else if (sig == SIGUSR2){	//if signal number equals SIGUSR2
 			//Lock 2
 			pthread_mutex_lock(&sigR2);
 			//get the end time in microseconds
@@ -310,30 +365,29 @@ void* reporter(){
 			total++;
 			pthread_mutex_unlock(&sigR2);
 		} 
-		else if(rc <= 0){
+		else if(rc <= 0){			//if error
 			fprintf(stderr,"%sERROR SIGWAIT() REPORTER!%s %d %s tid[%lu]\n", 
 					RED, WHITE, rc, strerror(errno), pthread_self());
 		} 
 
 		//For every ten signals, report the message
 		if(flag){
-			printf("%s\n", asctime(localtime(&dateTime)));
 			//Compute averages for each signal type in reporter.
 			average1 = sum1/(float)count1;
 			average2 = sum2/(float)count2;
-			printf("SharedSig: %d, total: %d, SUM1: %ld, SUM2: %ld, Count1: %d, Count2: %d\n", 
-					sharedSignal+1, total + 1, sum1, sum2, count1, count2);
-			printf("New count: 1: %d 2: %d\n", loc_sigReceive1, loc_sigReceive2);
-			printf("Average for SIGUSR1: %f\n", average1);
-			printf("Average for SIGUSR2: %f\n", average2);
-			printf("Average 1 : %f\n", sum1/(float)(sigReceive1%10));
-			printf("Average 2 : %f\n", sum2/(float)(sigReceive2%10));
-			printf("Average1 new: %f\n", sum1/(float)loc_sigReceive1);
-			printf("Average2 new: %f\n", sum1/(float)loc_sigReceive2);
-			printf("Signal Sent 1: %d\n", sigSent1);
-			printf("Signal Sent 2: %d\n", sigSent2);
-			printf("Signal Received 1: %d\n", sigReceive1);
-			printf("Signal Received 2: %d\n\n", sigReceive2);
+			printf("%s [SIGUSR1: Sent: %d, Received: %d, Sum Time: %ld, Average Time: %f ms];\n"\
+				   " [SIGUSR2: Sent: %d, Received: %d, Sum Time: %ld, Average Time: %f ms]; "\
+				   "Total: %d\n\n", 
+				   asctime(localtime(&dateTime)), sigSent1, sigReceive1, sum1, average1,
+				   sigSent2, sigReceive2, sum2, average2, total); 
+				   
+
+			//write and append to csv file
+			if((fd = fopen(fileName, "a")) == NULL){
+				perror("Error with opening file\n");
+			}
+      		fprintf(fd, "%f, %f,\n", average1, average2);
+      		fclose(fd);
 			
 			//Reset counters and flag
 			count1 = 0;
