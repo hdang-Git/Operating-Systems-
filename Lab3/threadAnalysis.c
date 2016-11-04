@@ -21,7 +21,7 @@
 #define NUMTHREADS 9
 #define SIGTHREADS 3
 #define HANDLETHREADS 2
-#define SIGCOUNT 30
+#define SIGCOUNT 100000
 #define SIGNUM 10
 #define WHITE "\x1B[0m"
 #define GREEN "\x1B[32m"
@@ -48,7 +48,6 @@ volatile int sigSent2 = 0;				//Counter for total sent SIGUSR2 signals
 volatile int sharedSignal = 0;			//Counter for total signals sent
 volatile int sigReceive1 = 0; 			//Counter for total received SIGUSR1 signals
 volatile int sigReceive2 = 0;			//Counter for total received SIGUSR2 signals
-volatile int flag = 0;					//Boolean Flag for when certain # of signals gen.
 volatile int total = 0;					//Counter for total received in reporter
 volatile int count1 = 0;				//Counter for received SIGUSR1 in reporter
 volatile int count2 = 0;				//Counter for received SIGUSR2 in reporter
@@ -153,6 +152,7 @@ int main(){
 	return 0;
 }
 
+
 /*********************************************************************************************
  * This function returns a random float number between two passed in numbers.                *
  *                                                                                           *
@@ -227,10 +227,6 @@ void* sig_handler(){
 		}
 		//Increment shared total signal counter
 		sharedSignal++;
-		//If shared total signal counter is a multiple of ten, set flag to 1
-		if(((sharedSignal + 1) %10) == 0){
-			flag = 1;
-		}
 		pthread_mutex_unlock(&shared);
 		//Sleep for a random interval of time 
 		sleep(randNum(0.01, 0.1));
@@ -247,18 +243,18 @@ void* sig_handler(){
 void* handler1(){
 	int rc;
 	sigset_t sigmask;
-	timeout.tv_sec = 0;
-	timeout.tv_nsec = 3;
+	timeout.tv_sec = 5;
+	timeout.tv_nsec = 0;
 
 	//build different signal set to wait on sigusr1 
 	sigemptyset(&sigmask);
 	sigaddset(&sigmask, SIGUSR1);
+	//Loop until there are no more signals to dequeue or error
 	while((rc = sigtimedwait(&sigmask, NULL, &timeout)) > 0){
 		pthread_mutex_lock(&sigR1);	
 		sigReceive1++;
 		//printf("%s---SIGUSR1 Received Count: %d\n%s", BLUE, sigReceive1, WHITE);
 		pthread_mutex_unlock(&sigR1);
-
 	}	
 	if(sharedSignal < SIGCOUNT && rc  <= 0){
 		perror("Handler 1: Error with SIGTIMEDWAIT()\n");
@@ -278,13 +274,13 @@ void* handler1(){
 void* handler2(){
 	int rc;
 	sigset_t sigmask;
-	timeout.tv_sec = 0;
-	timeout.tv_nsec = 3;
+	timeout.tv_sec = 5;
+	timeout.tv_nsec = 0;
 
 	//build different signal set to wait on sigusr2 
 	sigemptyset(&sigmask);
 	sigaddset(&sigmask, SIGUSR2);
-	//
+	//Loop until there are no more signals to dequeue or error
 	while((rc = sigtimedwait(&sigmask, NULL, &timeout)) > 0){
 		pthread_mutex_lock(&sigR2);
 		sigReceive2++;
@@ -311,11 +307,14 @@ void* handler2(){
  *********************************************************************************************/
 void* reporter(){
 	int sig, rc;
+	//local counter
+	static int i = 0;			
 	long int difference1, difference2, sum1 = 0, sum2 = 0;
 	float average1 = 0.0, average2 = 0.0;
 	//Get current datetime
 	time_t dateTime;
 	dateTime = time(NULL);
+	//Set up csv file to print average times to
 	FILE* fd;
 	char* fileName = "AvgTimes.csv";
 	//Create signal set to wait on both SIGUSR1 and SIGUSR2 
@@ -323,13 +322,13 @@ void* reporter(){
 	sigemptyset(&sigmask);
 	sigaddset(&sigmask, SIGUSR1);
 	sigaddset(&sigmask, SIGUSR2);
-	
+	//pthread_sigmask(SIG_BLOCK, &sigmask, NULL);	
 	gettimeofday(&t1, NULL);			    //get the end time in microseconds
 	gettimeofday(&t2, NULL);			    //get the end time in microseconds
 	start1 = t1.tv_sec * 1000000L + t1.tv_usec;  //Convert s & us to us
 	start2 = t2.tv_sec * 1000000L + t2.tv_usec;  //Convert s & us to us
 	//Loop while the signal count is less than the specified total count 
-	while(sharedSignal < SIGCOUNT){
+	while(1){
 		rc = sigwait(&sigmask, &sig);	//retrieve signal number 
 		if(sig == SIGUSR1){				//if signal number equals SIGUSR1
 			//Lock 1
@@ -347,6 +346,7 @@ void* reporter(){
 			//Increment counter for SIGUSR1
 			count1++;
 			total++;
+			i++;
 			pthread_mutex_unlock(&sigR1);
 		} else if (sig == SIGUSR2){	//if signal number equals SIGUSR2
 			//Lock 2
@@ -363,6 +363,7 @@ void* reporter(){
 			start2 = end2;
 			count2++;
 			total++;
+			i++;
 			pthread_mutex_unlock(&sigR2);
 		} 
 		else if(rc <= 0){			//if error
@@ -371,13 +372,13 @@ void* reporter(){
 		} 
 
 		//For every ten signals, report the message
-		if(flag){
+		if(((i+1) % 10) == 0){
 			//Compute averages for each signal type in reporter.
 			average1 = sum1/(float)count1;
 			average2 = sum2/(float)count2;
-			printf("%s [SIGUSR1: Sent: %d, Received: %d, Sum Time: %ld, Average Time: %f ms];\n"\
+			printf("%d %s [SIGUSR1: Sent: %d, Received: %d, Sum Time: %ld, Average Time: %f ms];\n"\
 				   " [SIGUSR2: Sent: %d, Received: %d, Sum Time: %ld, Average Time: %f ms]; "\
-				   "Total: %d\n\n", 
+				   "Total: %d\n\n", i,
 				   asctime(localtime(&dateTime)), sigSent1, sigReceive1, sum1, average1,
 				   sigSent2, sigReceive2, sum2, average2, total); 
 				   
@@ -389,14 +390,15 @@ void* reporter(){
       		fprintf(fd, "%f, %f,\n", average1, average2);
       		fclose(fd);
 			
-			//Reset counters and flag
+			//Reset counters, accumulator, and flag
 			count1 = 0;
 			count2 = 0;
+			sum1 = 0;
+			sum2 = 0;
 			total = 0;
-			flag = 0;
 		}
-		//TODO: delete
-		if(sharedSignal == SIGCOUNT-1)
+		//Stop the reporting thread when shared signal exceed desired signal count
+		if(sharedSignal >= SIGCOUNT-1)
 			break;
 		
 	}
