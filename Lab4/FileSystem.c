@@ -118,6 +118,7 @@ void myCreate(FILE* fp){
 
 /*
  * This function finds the empty sector in a data region. Used to write to data region. 
+ * Returns the sector number. 
  */
 int findEmptySector(FILE* fp, int offset){
 	printf("findEmptySector() called\n");
@@ -143,7 +144,7 @@ int findEmptySector(FILE* fp, int offset){
 		}
 		i++;
 	} while(temp != 0 && byteSeek != -1);
-	return byteSeek;
+	return byteSeek/SECTOR_SIZE;
 }
 
 /*
