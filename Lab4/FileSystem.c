@@ -12,24 +12,22 @@
 
 
 //function prototypes
-void fillReservedSec();
+void fillReservedSec(FILE*);
 void fillRD();
-void myCreate();
+void myCreate(FILE*);
 void myWrite();
 void myRead();
 
 int findEmptySector(FILE*, int);
 int findEmptyEntry(FILE*, int, int);
+int findFreeDirFileEntry(FILE*, int, int);
 void getDateTime(struct RD*);
 
 
-typedef unsigned bits;
-unsigned char byte; 		//uint8_t 
-unsigned short twoBytes;  	//uint16_t
-FILE* fp;
+
 unsigned short BPS; 
 unsigned short totalSectors;
-
+int currently_written_sector;
 
 /*
 	CALCULATION NOTES:
@@ -37,17 +35,18 @@ unsigned short totalSectors;
  */
 
 int main(){
-	fp = fopen("Drive2MB", "r+");
+	FILE* fp = fopen("Drive2MB", "r+");
 	//fillReservedSec();
 	//fillRD();
-	myCreate();
+	myCreate(fp);
+	fclose(fp);
 	return 0;
 }
 
 /*
  * This function writes to the boot sector and sets the global variables.
  */
-void fillReservedSec(){
+void fillReservedSec(FILE* fp){
 	struct VBR* v = malloc(sizeof(struct VBR));
 	v->BPS = SECTOR_SIZE;
 	v->SPC = 4;
@@ -65,88 +64,77 @@ void fillRD(){
 
 }
 
-//adding a file to root directory
-void myCreate(){
-	FILE* fp = fopen("Drive2MB", "r+");
-	unsigned short temp;
-	//add to root directory
-	fseek(fp, SECTOR_SIZE * RD_OFFSET, SEEK_SET);
-	fscanf(fp, "%hu", &temp);	//TODO: change to fread()
-	printf("temp: %hd\n", temp); 
-	printf("ftell(): %ld\n", ftell(fp));
-	//if nothing exists (first write) or check that no sectors are used
-	if(temp == 0){
-		//struct RD* r = malloc(sizeof(struct RD));
-		printf("Root directory is found + %d\n", temp);
+/*
+ * Can create empty files and directories
+ */
+void myCreate(FILE* fp){
+	printf("myCreate(): \n");
+	//find free entry in root directory and return location
+	int location = findFreeDirFileEntry(fp, RD_OFFSET, DATA_OFFSET-1);
+	printf("Location of RD: %d bytes in\n", location);
+	int fatLocation = findEmptyEntry(fp, FAT_OFFSET, RD_OFFSET-1);
+	printf("Free fat location: %d\n", fatLocation);
+	
+			
+	//TODO: update this in the case of subdirectories
+	//TODO: consider whether or not for empty file/directory to even allocate space for it
+	//find first empty data sector
+	int sectorLocation = findEmptySector(fp, DATA_OFFSET-1);
+	//update currently used sector in data region
+	currently_written_sector = sectorLocation;
+	printf("Free data sector @ %d %d\n", sectorLocation, currently_written_sector);
+	
+	//if entry space exists and aren't being used
+	if(location != -1 && fatLocation != -1 && sectorLocation != -1){
+		printf("Root directory is found + %d\n", location);
 		//Create file/dir struct
 		struct RD* r = malloc(sizeof(struct RD));
 		strcpy(r->filename, "Testing");
 		strcpy(r->ext, "txt");
-		r->attr = 0;
-		getDateTime(r);		
+		r->attr = 0;		//set as a file
+		getDateTime(r);		//set datetime
 		printf("date time %s\n",r->datetime);
-		/*
-		r->reserved1 = 1;
-		r->createdTime = 0;
-		r->createdDate = 0;
-		r->accessDate = 0;
-		r->reserved2 = 0;
-		r->modifiedTime = 0;
-		r->modifiedDate = 0;
-		*/
-		r->occupied=1;
-
-		//find first empty fat sector
-		findEmptySector(fp, FAT_OFFSET);
-			
-		//call a method to return offset
-		r->startCluster=FAT_OFFSET;
-
-		r->fileSize = 532;
-		//if file size is greater than cluster size (2 sectors)
-		if(r->fileSize > 1024){
-			//loop and decrement by 1024
-		}
-		//write the file struct into the root directory 
+		r->occupied=1;		//set as occupied 
+		r->startCluster=sectorLocation;
+		r->fileSize = 0;
 		
+		//write the file struct into the root directory 
+		fseek(fp, location, SEEK_SET);
+		fwrite(r, sizeof(struct RD), 1, fp);
+		//write 0xFFFF into first free fat entry
+		signed short endOfFile= 0xFFFF; // or -1
+		fseek(fp, fatLocation, SEEK_SET);
+		fwrite(&endOfFile, sizeof(signed short), 1, fp);
+	} else if(location == -1){
+		printf("Root Directory has no space or error. %d\n", location);
+	} else if(fatLocation == -1){
+		printf("No more space in FAT!!! %d\n", fatLocation);
+	} else if(sectorLocation == -1){
+		printf("Ran out of space in Data Section. Byte location %d\n", sectorLocation);
 	} else {
-		printf("Root Directory isn't empty or error. %d\n", temp);
-	} 
-	
-	fclose(fp);
-	//else scan through reserved1 sections
-	/*
-	int i = 0;
-	//512 bytes 32 bytes per file/directory -> 16 entries * 32 records = 512 total records
-	
-	for(i = 0; i < 512; i *= 32){
-		fseek(fp, SECTOR_SIZE*RD_OFFSET + i, SEEK_SET); //change to bps
+		printf("Error\n");	
 	}
-	*/
-	
-	
-	//if greater than cluster size add to fat else end with -1 for 2 bytes
-	//add offset and go to data section, write data
 }
 
 /*
- * This function finds the empty sector in a data region
+ * This function finds the empty sector in a data region. Used to write to data region. 
  */
 int findEmptySector(FILE* fp, int offset){
+	printf("findEmptySector() called\n");
 	unsigned short temp;
-	int i = 1;				//@ 1 to compensate for boot sector
+	int i = 1;				//1 to compensate for boot sector
 	int byteNumber;
 	int byteSeek = -1;
 	do {
-		//start at first fat cluster;
-		int byteNumber = SECTOR_SIZE * offset + i * SECTOR_SIZE; //or i * CLUSTER_SIZE;
+		//start at first sector/cluster of offset
+		int byteNumber = SECTOR_SIZE * offset + i * SECTOR_SIZE; //or TODO: i * CLUSTER_SIZE;
 		fseek(fp, byteNumber, SEEK_SET);
 		printf("ftell(): %ld\n", ftell(fp));
 		printf("Byte Number: %d\n", byteNumber);
 		//read in first two bytes, if not 0 move to next block.
 		fread(&temp, sizeof(unsigned short),1, fp); 
 		printf("temp value: %hu\n", temp);
-		//if first pointer val isn't 0, then move on to next cluster sector
+		//if first val isn't 0, then move on to next sector/cluster
 		if(temp == 0){
 			byteSeek = byteNumber;
 			printf("free space at sector %d\n", byteSeek);
@@ -163,21 +151,52 @@ int findEmptySector(FILE* fp, int offset){
  * The start and end offsets define the region boundaries.
  * start is defined as the start of one region, end is the start of the next region
  */
-int findEmptyEntry(File* fp, int start, int end){
+int findEmptyEntry(FILE* fp, int start, int end){
+	printf("findEmptyEntry() called\n");
 	unsigned short temp;
 	int i;
 	int byteLocation = -1;
 	//scan through region until it hits an empty location
-	for(i = start*SECTOR_SIZE; i < end*SECTOR_SIZE; i++){
-		byteLocation = SECTOR_SIZE * start + i*2;	//search through every two bytes
-		fseek(fp, byteLocation, SEEK_SET);
-		//printf("ftell(): %ld\n", ftell(fp));
+	for(i = start*SECTOR_SIZE; i < end*SECTOR_SIZE; i+=2){
+		fseek(fp, i, SEEK_SET);
+		printf("ftell(): %ld\n", ftell(fp));
 		fread(&temp, sizeof(unsigned short), 1, fp);
 		if(temp == 0){
+			byteLocation = i;
 			printf("read in entry: %hu\n", temp);
 			printf("ftell(); %ld\n", ftell(fp));
+			printf("bytelocation in findEmptyEntry(): %d\n", byteLocation);
 			break;
 		}
+	}
+	return byteLocation;
+}
+
+/*
+ * This function finds an empty location in the root directory or directory structure by 
+ * checking the occupied field in the virtual drive s.
+ */
+int findFreeDirFileEntry(FILE* fp, int s_offset, int e_offset){
+	printf("findFreeDirFileEntry() called\n");
+	int i;
+	int entrySize = 32;			//each file or directory entry is 32 bytes big
+	unsigned char bytes_read[entrySize];	//read in first 32 bytes into this array
+	int byteLocation = -1;
+	//scan for 'occupied' field and compare to 0
+	for(i = s_offset*SECTOR_SIZE; i <= e_offset*SECTOR_SIZE; i+=32){
+		printf("dir/file entry location in bytes = %d\n", i);
+		fseek(fp, i, SEEK_SET);
+		printf("ftell(); %ld\n", ftell(fp));
+		fread(bytes_read, sizeof(unsigned char), entrySize, fp);	//read into array
+		//if 'occupied' field bit  is 0, then it is free, else move on 
+		if(bytes_read[25] == 0){
+			printf("SUCCESS!!!\n");
+			byteLocation = i;
+			break;
+		} else{
+			printf("No. not here. Such fail. %c\n", bytes_read[25]);
+		}
+		
 	}
 	return byteLocation;
 }
