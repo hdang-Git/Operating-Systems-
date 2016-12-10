@@ -11,7 +11,7 @@
 #define DataRD_OFFSET 153
 #define DATA_OFFSET 665
 #define END 4096
-
+#define BYTE_FAT 2
 
 //function prototypes
 void fillReservedSec(FILE*);
@@ -20,16 +20,17 @@ void writeToFat(FILE*, unsigned short*, int);
 void writeToData(FILE*, char*, int);
 void myWrite();
 void myRead();
-
 void mapFatData(FILE*, struct RD*, char[], int);
 int countFileSectorSize(FILE*, struct RD*);
-void parseDir(char*, char*[]);
+void parseCmd(char*, char*[]);
+int countDelim(char*, char);
 void copyDataToArr(char*,int, char[][SECTOR_SIZE], int);
 int findEmptySector(FILE*, int, int);
 int findEmptyEntry(FILE*, int, int);
 int findFreeDirFileEntry(FILE*, int, int);
 void getDateTime(struct RD*);
-
+void findEntry(FILE*, int , int, char*[]);
+void traverse(FILE*, char*[], int);
 
 unsigned short BPS; 
 unsigned short totalSectors;
@@ -45,6 +46,18 @@ int main(){
 	FILE* fp = fopen("Drive2MB", "r+");
 	fillReservedSec(fp);
 	myCreate(fp);
+	
+	//assume format is " ../.. where '/' can't be at end
+	/*
+	char input[] = "home/testing/file.txt";	
+	int numDirFiles = countDelim(input, '/');	
+	printf("%d\n", numDirFiles);	
+	char* dir_files[numDirFiles];
+	parseCmd(input, dir_files);
+	printf("dir_files[0] = %s\n", dir_files[0]);
+	
+	*/
+	
 	fclose(fp);
 	return 0;
 }
@@ -64,6 +77,55 @@ void fillReservedSec(FILE* fp){
 	v->sysType = 12;
 	fwrite(v, sizeof(struct VBR), 1, fp);
 	printf("wrote to disk\n");
+}
+
+//TODO
+void traverse(FILE* fp, char* dir_files[], int size){
+	int i;
+	int offset = RD_OFFSET;
+	unsigned char metadata[32];
+	for(i = 0; i < size; i++){
+		//call findEntry() and copy over entry into metadata
+		
+		
+	}
+}
+
+//TODO
+void findEntry(FILE* fp, int s_offset, int e_offset, char* bytes_read[]){
+	printf("findEntry() called\n");
+	int i;
+	int j;
+	int byteLocation = -1;
+	int entrySize = 32;			//each file or directory entry is 32 bytes big
+	//unsigned char bytes_read[entrySize];	//read in first 32 bytes into this array
+	char* arr[entrySize];
+	int nameLength = 8;
+	char* fileName[nameLength];
+	//scan for 'occupied' field and compare to 0
+	for(i = s_offset*SECTOR_SIZE; i <= e_offset*SECTOR_SIZE; i+=32){
+		printf("dir/file entry location in bytes = %d\n", i);
+		//scan every 32 bytes
+		fseek(fp, i, SEEK_SET);
+		printf("ftell(); %ld\n", ftell(fp));
+		fread(bytes_read, sizeof(unsigned char), entrySize, fp);	//read into array
+		
+		//copy over /concatenate  string of first 8 characters
+		for(j = 0; j < nameLength; j++){
+			fileName[j] = bytes_read[j];
+		}
+		//if 'occupied' field bit  is 1, then it is free, else move on 
+		if(*bytes_read[25] == '1'){
+			printf("SUCCESS!!!\n");
+			byteLocation = i;
+			break;
+		//} else if(bytes_read[25] == 1){
+		//	printf("directory ftell() %c %ld\n", bytes_read[25], ftell(fp));
+		} else{
+			//printf("No. not here. Such fail. %c\n", bytes_read[25]);
+		}
+		
+	}
 }
 
 /*
@@ -92,7 +154,7 @@ void myCreate(FILE* fp){
 		//printf("date time %s\n",r->datetime);
 		r->occupied=1;		//set as occupied 
 		r->startCluster = fatLocation;	//store fat byte address entry 
-		r->fileSize = 48;//1322;
+		r->fileSize = 48; //0; //1322;
 		
 		//if it is a directory type 
 		//point to an empty sector as usual in startcluster
@@ -100,6 +162,7 @@ void myCreate(FILE* fp){
 		
 		//test input data from text file
 		char* dataTest = "HELLO BLA BLAH BLAH TESTING OKAY WHATEVER PEACE.";
+		//dataTest = "";
 		char data[r->fileSize];
 		strcpy(data, dataTest);
 		
@@ -145,8 +208,9 @@ void mapFatData(FILE* fp, struct RD* r, char data[], int fatLocation){
 	printf("\tsectorCount %d\n", sectorCount);
 	int i;
 	//current empty fat entry
-	int currentFatLocation = fatLocation; 
-	int fatL;
+	int currentFatLocation = fatLocation;
+	printf("-> currentFatLocation: %d\n", fatLocation); 
+	int fatL = fatLocation;
 	char blockData[sectorCount][SECTOR_SIZE]; 	//number of blocks each of 512 char big
 	//copy data to blockData array
 	copyDataToArr(data, sectorCount, blockData, r->fileSize);
@@ -154,39 +218,62 @@ void mapFatData(FILE* fp, struct RD* r, char data[], int fatLocation){
 	int dataL = -1;
 	printf("\t Current fat location: %d\n", fatL);
 	
-	//loop around the sectors and write
-	for(i = 0; i < sectorCount; i++){
-		//find the next empty entry in fat table
-		fatL = findEmptyEntry(fp, fatL+2, (RD_OFFSET-1)*SECTOR_SIZE);
-		printf("\t Free fat entry %d. %d\n", i, fatL);
-		//find empty sector in data region to map to
+	//if creating an empty file, reserve one data block 
+	if(sectorCount == 0){
+		fatVal = 0xFFFF;
+		char dummy = '*';
 		dataL = findEmptySector(fp, DATA_OFFSET*SECTOR_SIZE, (END-1)*SECTOR_SIZE);
-		printf("\t Free data block %d.\n", dataL);
-		//error check
-		if(dataL != -1 && fatL != -1){
-			//if last sector to write to, add terminating 0xFFFF to note end of file
-			if(i == sectorCount - 1){
-				fatVal = 0xFFFF; 
-			} else {
-				//get the fat value of the next empty fat to write into the current entry
-				fatVal = fatL-SECTOR_SIZE;
-			}
-			//write to fat and write data
-			printf("fat value to write: %hu\n", fatVal);
-			//writeToFat(fp, &fatVal, fatL);
-			//writeToData(fp, blockData[i], dataL);
-			//writeToFat(fp, &fatVal, fatL);
+		printf("sector size is 0, data sector is %d\n", dataL/SECTOR_SIZE);
+		if(dataL != -1){
+			//find empty entry in fat and write
 			fseek(fp, currentFatLocation, SEEK_SET);
 			fwrite(&fatVal,  sizeof(unsigned short), 1, fp);
-			printf("fwrite fatVal to sector %d\n", currentFatLocation/SECTOR_SIZE);
-			//writeToData(fp, blockData[i], dataL);
+			//find empty data region and reserve it with a dummy character
 			fseek(fp, dataL, SEEK_SET);
-			fwrite(blockData[i], sizeof(char), sizeof(blockData[i]), fp);
-			printf("%s\n", blockData[i]);
-			printf("fwrite blockdata to sector %d\n", dataL/SECTOR_SIZE);
+			fwrite(&dummy, sizeof(char), 1, fp);
+			printf("wrote empty file to fat\n");
 		}
-		//update current fat location to next 
-		currentFatLocation = fatL;
+	} else {
+		//loop around the sectors and write
+		for(i = 0; i < sectorCount; i++){
+			//find the next empty entry in fat table
+			fatL = findEmptyEntry(fp, fatL+BYTE_FAT, (RD_OFFSET-1)*SECTOR_SIZE);
+			printf("\t --Free fat entry %d\n", fatL);
+			//find empty sector in data region to map to (with 1-to-1 fat to data mapping)
+			int offsetD = (currentFatLocation-SECTOR_SIZE)/2;
+			printf("---------> offset Data : %d\n", offsetD);
+			dataL = findEmptySector(fp, ((DATA_OFFSET+offsetD)*SECTOR_SIZE), (END-1)*SECTOR_SIZE);
+			printf("\t --Free data block %d. Sector: %d\n", dataL, dataL/SECTOR_SIZE);
+			
+			//error check
+			if(dataL != -1 && fatL != -1){
+				//if last sector to write to, add terminating 0xFFFF to note end of file
+				if(i == sectorCount - 1){
+					fatVal = 0xFFFF; 
+				} else {
+					//get the fat value of the next empty fat to write into the current entry
+					fatVal = fatL-SECTOR_SIZE;
+				}
+				
+				//write to fat and write data
+				printf("\tfat value to write: %hu\n", fatVal);
+				printf("\tcurrent fat value location: %d\n", currentFatLocation);
+				//TODO: refactor these method calls and delete the lines afterwards
+				//writeToFat(fp, &fatVal, fatL);
+				//writeToData(fp, blockData[i], dataL);
+				//writeToFat(fp, &fatVal, fatL);
+				fseek(fp, currentFatLocation, SEEK_SET);
+				fwrite(&fatVal,  sizeof(unsigned short), 1, fp);
+				printf("\tfwrite fatVal to sector %d\n", currentFatLocation/SECTOR_SIZE);
+				//writeToData(fp, blockData[i], dataL);
+				fseek(fp, dataL, SEEK_SET);
+				fwrite(blockData[i], sizeof(char), sizeof(blockData[i]), fp);
+				//printf("%s\n", blockData[i]);
+				printf("\tfwrite blockdata to sector %d\n", dataL/SECTOR_SIZE);
+			}
+			//update current fat location to next 
+			currentFatLocation = fatL;
+		}
 	}
 }
 
@@ -208,13 +295,13 @@ void copyDataToArr(char data[], int sectorCount, char block[][SECTOR_SIZE], int 
 		//write the characters
 		for(j = 0;  data[start] != '\0' && end > 0 && j < length; j++){
 			block[i][j] = data[start]; 
-			printf("\tblock[%d][%d] = %c \n", i, j, block[i][j]);
+			//printf("\tblock[%d][%d] = %c \n", i, j, block[i][j]);
 			start++;
 		}
 		//write 0s everywhere else because of random character on fwrite
 		for(k = start; k < SECTOR_SIZE; k++){
 			block[i][k] = 0; 
-			printf("\tblock[%d][%d] = %c \n", i, k, block[i][k]);
+			//printf("\tblock[%d][%d] = %c \n", i, k, block[i][k]);
 			start++;
 		}
 		end -= SECTOR_SIZE;
@@ -243,7 +330,7 @@ void writeToData(FILE* fp, char* data, int location){
 
 
 void myread(){
-	//count number '/'
+	//have a method that counts number of '/'
 	//create array of with size = # of '/' + 1
 	//if has '/' in it
 		//call method to token array
@@ -371,22 +458,22 @@ void getDateTime(struct RD* rd){
 	
 /*********************************************************************************************
  * This function parses the passed in command string and stores it into an array. Each       *
- * index of the array stores an argument which is separated by spaces in the string          *
+ * index of the array stores an argument which is separated by slashes in the string         *
  * Preconditions:                                                                            *
  * @params input - string command typed by user                                              *
  * @params arr - array of strings that will store parsed command                             * 
  * Postconditions:                                                                           *
  * @return void                                                                              *
  *********************************************************************************************/
-void parseDir(char* input, char* arr[]){
+void parseCmd(char* input, char* arr[]){
    char* token;
    const char delimiter[2] = "/";
    int i = 0;
-   //Get the first token turning the first space to a Null character
+   //Get the first token turning the first slash to a Null character
    token = strtok(input, delimiter);
    arr[i] = token;
    i++;
-   //Loop through all tokens with a space and aren't null
+   //Loop through all tokens with a slash and aren't null
    while(token != NULL){
    	   token = strtok(NULL, delimiter);	
    	   arr[i] = token;
@@ -394,4 +481,26 @@ void parseDir(char* input, char* arr[]){
    }
    printf("\n");
 }
+
+
+/*********************************************************************************************
+ * This function counts the numbers of delimiters in the user entered command. For the scope *
+ * of this program slashes are counted.                                                      *
+ *                                                                                           *
+ * Preconditions:                                                                            *
+ * @params input - input string command                                                      *
+ * @params delim - character of delimiter to look for                                        *
+ * Postconditions:                                                                           *
+ * @return number of spaces (arguments) in the string                                        *
+ *********************************************************************************************/
+int countDelim(char* input, char delim){
+    int i;
+    int count = 0;
+	for(i = 0; input[i] != '\0'; i++)
+		if(input[i] == delim)
+			count++;
+	return count + 1;
+}
+
+
 
