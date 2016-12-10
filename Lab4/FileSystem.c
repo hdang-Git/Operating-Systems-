@@ -74,20 +74,14 @@ void myCreate(FILE* fp){
 	//find free entry in root directory and return location
 	int location = findFreeDirFileEntry(fp, RD_OFFSET, DATA_OFFSET-1);
 	printf("Location of RD: %d bytes in\n", location);
+	//find first empty data entry to write to fat
 	int fatLocation = findEmptyEntry(fp, FAT_OFFSET*SECTOR_SIZE, (RD_OFFSET-1)*SECTOR_SIZE);
 	printf("Free fat location: %d\n", fatLocation);
 	
 	//TODO: update this in the case of subdirectories
-	//TODO: consider whether or not for empty file/directory to even allocate space for it
-	//find first empty data sector to write to fat
-	int sectorLocation = findEmptySector(fp, FAT_OFFSET*SECTOR_SIZE, RD_OFFSET*SECTOR_SIZE)
-						 /SECTOR_SIZE;
-	//update currently used sector in data region
-	currently_written_sector = sectorLocation;
-	printf("Free data sector @ %d %d\n\n", sectorLocation, currently_written_sector);
 	
 	//if entry space exists and aren't being used
-	if(location != -1 && fatLocation != -1 && sectorLocation != -1){
+	if(location != -1 && fatLocation != -1){
 		//printf("Root directory is found + %d\n", location);
 		//Create file/dir struct
 		struct RD* r = malloc(sizeof(struct RD));
@@ -97,30 +91,29 @@ void myCreate(FILE* fp){
 		getDateTime(r);		//set datetime
 		//printf("date time %s\n",r->datetime);
 		r->occupied=1;		//set as occupied 
-		r->startCluster=sectorLocation;
+		r->startCluster = fatLocation;	//store fat byte address entry 
 		r->fileSize = 48;//1322;
 		
+		//if it is a directory type 
+		//point to an empty sector as usual in startcluster
+		//write directory field there
+		
+		//test input data from text file
 		char* dataTest = "HELLO BLA BLAH BLAH TESTING OKAY WHATEVER PEACE.";
 		char data[r->fileSize];
 		strcpy(data, dataTest);
 		
-		if(r->fileSize == 0){
-			//write the file struct into the root directory 
-			fseek(fp, location, SEEK_SET);
-			fwrite(r, sizeof(struct RD), 1, fp);
-			//write 0xFFFF into first free fat entry
-			signed short endOfFile= 0xFFFF; // or -1
-			fseek(fp, fatLocation, SEEK_SET);
-			fwrite(&endOfFile, sizeof(signed short), 1, fp);
-		} else {
-			mapFatData(fp, r, data, fatLocation);
-		}
+		//write the file struct into the root directory 
+		fseek(fp, location, SEEK_SET);
+		fwrite(r, sizeof(struct RD), 1, fp);
+		
+		//map to the fat and data sections
+		mapFatData(fp, r, data, fatLocation);
+		
 	} else if(location == -1){
 		printf("Root Directory has no space or error. %d\n", location);
-	} else if(fatLocation == -1){
+	} else if(fatLocation == 0xD67){	//specific for shorts
 		printf("No more space in FAT!!! %d\n", fatLocation);
-	} else if(sectorLocation == -1){
-		printf("Ran out of space in Data Section. Byte location %d\n", sectorLocation);
 	} else {
 		printf("Error\n");	
 	}
