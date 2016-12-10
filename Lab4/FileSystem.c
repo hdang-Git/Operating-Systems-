@@ -15,7 +15,6 @@
 
 //function prototypes
 void fillReservedSec(FILE*);
-void fillRD();
 void myCreate(FILE*);
 void writeToFat(FILE*, unsigned short*, int);
 void writeToData(FILE*, char*, int);
@@ -25,14 +24,11 @@ void myRead();
 void mapFatData(FILE*, struct RD*, char[], int);
 int countFileSectorSize(FILE*, struct RD*);
 void parseDir(char*, char*[]);
-
 void copyDataToArr(char*,int, char[][SECTOR_SIZE], int);
-
 int findEmptySector(FILE*, int, int);
 int findEmptyEntry(FILE*, int, int);
 int findFreeDirFileEntry(FILE*, int, int);
 void getDateTime(struct RD*);
-
 
 
 unsigned short BPS; 
@@ -47,7 +43,7 @@ int currently_written_sector;
 
 int main(){
 	FILE* fp = fopen("Drive2MB", "r+");
-	//fillReservedSec(fp);
+	fillReservedSec(fp);
 	myCreate(fp);
 	fclose(fp);
 	return 0;
@@ -68,10 +64,6 @@ void fillReservedSec(FILE* fp){
 	v->sysType = 12;
 	fwrite(v, sizeof(struct VBR), 1, fp);
 	printf("wrote to disk\n");
-}
-
-void fillRD(){
-
 }
 
 /*
@@ -106,51 +98,23 @@ void myCreate(FILE* fp){
 		//printf("date time %s\n",r->datetime);
 		r->occupied=1;		//set as occupied 
 		r->startCluster=sectorLocation;
-		r->fileSize = 1322;
+		r->fileSize = 48;//1322;
 		
 		char* dataTest = "HELLO BLA BLAH BLAH TESTING OKAY WHATEVER PEACE.";
 		char data[r->fileSize];
 		strcpy(data, dataTest);
 		
-		mapFatData(fp, r, data, fatLocation);
-		/*
-		//if sectorCount > 1?
-			 x = find empty entry
-			for(i = 0; i < sectorCount; i++){
-				find next empty fat entry
-				fseek to that fat entry
-				
-				convert to a short format for that sector region
-					how?
-				formula is fat is from sectors 1 to 127  (0 + 512 to 512+ 65535)
-					unsigned short val = fatlocation - 512;
-					
-				the value is the fatLocation - (fat_offset) + (sectorLocation-1)*512
-				check for corresponding data section block is empty
-				if those both exist
-				fwrite that next empty fat entry
-				fwrite to that data region
-				x = next empty fat entry
-				
-				if(file)
-					map to data by adding offset to sectorCount
-				else if(dir)
-					make these 32 blocks big
-					set 32 free fat entries ... rethink this 
-			}
-			set new empty fat entry to 0xFFFF
-		
-		 */
-		
-		/* TODO: uncomment this
-		//write the file struct into the root directory 
-		fseek(fp, location, SEEK_SET);
-		fwrite(r, sizeof(struct RD), 1, fp);
-		//write 0xFFFF into first free fat entry
-		signed short endOfFile= 0xFFFF; // or -1
-		fseek(fp, fatLocation, SEEK_SET);
-		fwrite(&endOfFile, sizeof(signed short), 1, fp);
-		*/
+		if(r->fileSize == 0){
+			//write the file struct into the root directory 
+			fseek(fp, location, SEEK_SET);
+			fwrite(r, sizeof(struct RD), 1, fp);
+			//write 0xFFFF into first free fat entry
+			signed short endOfFile= 0xFFFF; // or -1
+			fseek(fp, fatLocation, SEEK_SET);
+			fwrite(&endOfFile, sizeof(signed short), 1, fp);
+		} else {
+			mapFatData(fp, r, data, fatLocation);
+		}
 	} else if(location == -1){
 		printf("Root Directory has no space or error. %d\n", location);
 	} else if(fatLocation == -1){
@@ -162,15 +126,6 @@ void myCreate(FILE* fp){
 	}
 }
 
-
-	//if filesize < 512
-		//write to directory and write to fat
-		
-	//if it is a file
-		//while(size  > 0)  size=-512;
-		//find first empty entry in FAT region
-		//write to that 
-	//if it is a directory
 
 /*
  * This function counts number of sectors to write to.
@@ -196,14 +151,16 @@ void mapFatData(FILE* fp, struct RD* r, char data[], int fatLocation){
 	int sectorCount = countFileSectorSize(fp, r);
 	printf("\tsectorCount %d\n", sectorCount);
 	int i;
-	//current empty fat entry 
-	int fatL = fatLocation;
+	//current empty fat entry
+	int currentFatLocation = fatLocation; 
+	int fatL;
 	char blockData[sectorCount][SECTOR_SIZE]; 	//number of blocks each of 512 char big
 	//copy data to blockData array
 	copyDataToArr(data, sectorCount, blockData, r->fileSize);
 	unsigned short fatVal = 0;
 	int dataL = -1;
 	printf("\t Current fat location: %d\n", fatL);
+	
 	//loop around the sectors and write
 	for(i = 0; i < sectorCount; i++){
 		//find the next empty entry in fat table
@@ -223,9 +180,20 @@ void mapFatData(FILE* fp, struct RD* r, char data[], int fatLocation){
 			}
 			//write to fat and write data
 			printf("fat value to write: %hu\n", fatVal);
-			writeToFat(fp, &fatVal, fatL);
-			writeToData(fp, blockData[i], dataL);
+			//writeToFat(fp, &fatVal, fatL);
+			//writeToData(fp, blockData[i], dataL);
+			//writeToFat(fp, &fatVal, fatL);
+			fseek(fp, currentFatLocation, SEEK_SET);
+			fwrite(&fatVal,  sizeof(unsigned short), 1, fp);
+			printf("fwrite fatVal to sector %d\n", currentFatLocation/SECTOR_SIZE);
+			//writeToData(fp, blockData[i], dataL);
+			fseek(fp, dataL, SEEK_SET);
+			fwrite(blockData[i], sizeof(char), sizeof(blockData[i]), fp);
+			printf("%s\n", blockData[i]);
+			printf("fwrite blockdata to sector %d\n", dataL/SECTOR_SIZE);
 		}
+		//update current fat location to next 
+		currentFatLocation = fatL;
 	}
 }
 
@@ -239,13 +207,21 @@ void copyDataToArr(char data[], int sectorCount, char block[][SECTOR_SIZE], int 
 	printf("copyDataToArr() called.\n");
 	int i;
 	int j;
+	int k;
 	int start = 0;
 	int end = length;
 	for(i = 0; i < sectorCount; i++){
 		printf("ITERATION %d:\n", i); 
-		for(j = 0;  data[start] != '\0' && end > 0 && j < SECTOR_SIZE; j++){
+		//write the characters
+		for(j = 0;  data[start] != '\0' && end > 0 && j < length; j++){
 			block[i][j] = data[start]; 
 			printf("\tblock[%d][%d] = %c \n", i, j, block[i][j]);
+			start++;
+		}
+		//write 0s everywhere else because of random character on fwrite
+		for(k = start; k < SECTOR_SIZE; k++){
+			block[i][k] = 0; 
+			printf("\tblock[%d][%d] = %c \n", i, k, block[i][k]);
 			start++;
 		}
 		end -= SECTOR_SIZE;
@@ -253,14 +229,12 @@ void copyDataToArr(char data[], int sectorCount, char block[][SECTOR_SIZE], int 
 	}
 }
 
-
-
 /*
  * This function writes to the Fat the next fat entry as a unsigned short 
  * in the current fat position
  */
 void writeToFat(FILE* fp, unsigned short* data, int location){
-	printf("writeToFat() called to location %d\n", location);
+	printf("writeToFat() called to location %d, sector %d\n", location, location/SECTOR_SIZE);
 	fseek(fp, location, SEEK_SET);
 	fwrite(&data, sizeof(unsigned short), 1, fp);
 }
@@ -269,9 +243,35 @@ void writeToFat(FILE* fp, unsigned short* data, int location){
  * This function writes to the data section an array of char of size 512.
  */
 void writeToData(FILE* fp, char* data, int location){
-	printf("writeToData() called to location %d\n", location);
+	printf("writeToData() called to location %d, sector %d\n", location, location/SECTOR_SIZE);
 	fseek(fp, location, SEEK_SET);
-	fwrite(&data, sizeof(char*), 1, fp);
+	fwrite(&data, strlen(data), 1, fp);
+}
+
+
+void myread(){
+	//count number '/'
+	//create array of with size = # of '/' + 1
+	//if has '/' in it
+		//call method to token array
+		////parse directories and filename into an array (tokenize it)
+		//strcpy into a local array knowing length
+		//also make sure each element is a char array
+		//Loop search through directories (attr == 1) by comparing names
+			//if name matches, and not last element of array 
+				//go to next directory 
+			//if at end of array
+				//look for file
+			//else error message for unknown directory name
+	////////////////////////////////////////////////////////////////////////////
+	//Simple read
+	//locate file name
+	//loop read in root directory entries
+		//compare file name to file names in root directory
+		//if success, 
+			
+		//else print error message
+	
 }
 
 /*
