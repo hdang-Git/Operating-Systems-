@@ -32,12 +32,14 @@ void copyDataToArr(char*,int, char[][SECTOR_SIZE], int);
 int findEmptySector(FILE*, int, int);
 int findEmptyEntry(FILE*, int, int);
 int findFreeDirFileEntry(FILE*, int, int);
+void addToEmptyFile(FILE*, char*, char*);
 void getDateTime(struct RD*);
 char* getFileName(char*, char*);
 void append(FILE*, char*[]);
 void traverse(FILE*, char*[], int);
 int findEntry(FILE*, int , int, char*, char*);
 char* trim(char*, char);
+void rmNewLine(char*);
 int countCharNum(FILE*);
 void readData(FILE*, char[], int);
 void copyArrays(char*, char*, int);
@@ -67,11 +69,13 @@ int main(){
 	
 	FILE* fp = fopen("Drive2MB", "r+");
 	fillReservedSec(fp);
-	//myWrite(fp, "test1.txt");
+	myWrite(fp, "test1.txt");
 	//createEmptyFile(fp, "Hello.txt");
 	//createEmptyDir(fp, "Documents");
 	myRead(fp, "test1.txt");
-	/*
+	//char* data = "HELLO WHAT'S UP DOC?";
+	//addToEmptyFile(fp, "Hello",  data);
+	
 	//myCreate(fp);
     char* inputCmd = NULL;							//store user command
     int bytesRead; 									//# of bytes read from getline() func
@@ -88,6 +92,7 @@ int main(){
       	} else {
 
    			inputCmd = trim(inputCmd, ' ');			//get rid of leading & trailing spaces
+   			rmNewLine(inputCmd);					//get rid of '\n' character
         	int size = countDelim(inputCmd, ' ');	//count the # of args delimited by spaces
         	char* cmd[size];						//create array with size of # of args
         	parseCmd(inputCmd,cmd, " ");			//parse input into each index of array cmd
@@ -97,10 +102,14 @@ int main(){
         	chooseOption(fp, num+1, cmd[1]);
    		}
     }
-    */
+    
 	fclose(fp);
 	return 0;
 }
+
+/*********************************************************************************************
+ * This funciton displays a prompt to the user to inform them how to write in commands.      *
+ *********************************************************************************************/
 
 void printPrompt(){
 	printf("\n\n\n\n");
@@ -162,7 +171,7 @@ int check(char* input[], int size, char* fs_cmd[]){
  * This function writes extenral data to the file system.                                    *
  *********************************************************************************************/
 void myWrite(FILE* fp, char* name){
-	printf("Opening %s\n", name);
+	printf("Opening %s.\n", name);
 	FILE* inputFile = fopen(name, "r+");
 	if(inputFile != NULL){
 		int fileSize = countCharNum(inputFile);
@@ -387,7 +396,7 @@ void traverse(FILE* fp, char* dir_files[], int size){
 //TODO: refactor into smaller methods
 /*********************************************************************************************
  * This function finds specific entries from fat of the current file/directory in the data   *
- * region and returns fat entry on success, -1 otherwise                                     *
+ * region and returns offset from start sector on success, -1 otherwise                      *
  *********************************************************************************************/
 int findEntry(FILE* fp, int s_offset, int e_offset, char* name, char* metadata){
 	printf("findEntry() called\n");
@@ -590,6 +599,17 @@ void mapFatData(FILE* fp, struct RD* r, char data[], int fatLocation){
 }
 
 
+
+void addToEmptyFile(FILE* fp, char* fileName, char data[]){
+	char metadata[32];
+	//rewrite/update fat info of that entry
+	int offset = findEntry(fp, RD_OFFSET*SECTOR_SIZE, 
+							(DATA_OFFSET-1)*SECTOR_SIZE, fileName, metadata);
+	printf("offset: %d\n", offset);
+	
+}
+
+
 /*********************************************************************************************
  * This function copies data from one array to the the array blocks where length is the      *
  * length of data. If any size is less than 512, the rest of it is 0 so as to not            *
@@ -771,6 +791,22 @@ void parseCmd(char* input, char* arr[], char* delim){
    printf("\n");
 }
 
+/*********************************************************************************************
+ * This function removes any newlines in the command string as a result of file reading or   * 
+ * the getline function that adds a newline when user presses ENTER key.                     *
+ *                                                                                           *
+ * Preconditions:                                                                            *
+ * @params str - string command                                                              *
+ * Postconditions:                                                                           *
+ * @return void                                                                              *
+ *********************************************************************************************/
+void rmNewLine(char* str){
+	while(*str != '\0'){
+		if(*str == '\n')
+			*str = '\0';
+		str++;
+	}
+}
 
 /*********************************************************************************************
  * This function counts the numbers of delimiters in the user entered command. For the scope *
