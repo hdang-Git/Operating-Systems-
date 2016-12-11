@@ -34,10 +34,12 @@ void getDateTime(struct RD*);
 char* getFileName(char*, char*);
 
 void traverse(FILE*, char*[], int);
-void findEntry(FILE*, int , int, char*);
+int findEntry(FILE*, int , int, char*, char*);
 
 int countCharNum(FILE*);
 void readData(FILE*, char[], int);
+void copyArrays(char*, char*, int);
+
 
 unsigned short BPS; 
 unsigned short totalSectors;
@@ -55,7 +57,7 @@ int main(){
 	
 	
 	//assume format is " ../.. where '/' can't be at end
-	/*
+	
 	int i;
 	char input[] = "Testing.txt";	
 	//make a copy of input before string manipulations
@@ -88,17 +90,16 @@ int main(){
 	}
 
 	traverse(fp, dir_files, numDirFiles);
-	*/
 	
 	
+	/*
 	//Opening a file for input
 	FILE* inputFile = fopen("test1.txt", "r+");
-	
 	int fileSize = countCharNum(inputFile);
 	printf("fileSize: %d\n", fileSize);
 	char fileData[fileSize];
 	readData(inputFile, fileData, fileSize);
-	
+	*/
 	//fillReservedSec(fp);
 	//myCreate(fp);
 	//fclose(fp);
@@ -116,6 +117,10 @@ char* getFileName(char* path, char* bname){
 	return bname;
 }
 
+/*
+ * This function counts the number of characters in the data file.
+ * Use case is to get size of array dynamically at runtime.
+ */
 int countCharNum(FILE* file){
 	rewind(file);
 	char c;
@@ -131,12 +136,25 @@ int countCharNum(FILE* file){
 	return count;
 }
 
+/*
+ * This function reads in a data file into a char array.
+ */
 void readData(FILE* file, char arr[], int size){
 	rewind(file);
 	int i;
 	for(i = 0; i < size; i++){
 		arr[i] = fgetc(file);
 		printf("arr[%d] = %c\n", i, arr[i]);
+	}
+}
+
+/*
+ * This function copies one array into the other assuming that they are the same size.
+ */
+void copyArrays(char* src, char* dest, int size){
+	int i;
+	for(i = 0; i < size; i++){
+		src[i] = dest[i];
 	}
 }
 
@@ -173,14 +191,75 @@ void traverse(FILE* fp, char* dir_files[], int size){
 	int startOffset = RD_OFFSET;
 	int endOffset = DATA_OFFSET - 1;
 	unsigned char metadata[32];
-	//findEntry() 
-	findEntry(fp, startOffset, endOffset, dir_files[0]);
+	char attr;
+	unsigned char fileChSize[4];
+	int fileSize = 0;
+	unsigned short fatVal = -1;
+	unsigned short cur_Val = -1;
+	int offset = findEntry(fp, startOffset, endOffset, dir_files[0], metadata);
+	printf("offset %d\n", offset);
+	if(offset != -1){
+		attr = metadata[12];
+
+		//get file size via byte manipulation 
+		fileSize += metadata[28] | (metadata[29]<<8) | (metadata[30]<<16) | (metadata[31]<<24);
+		printf("fileSize %d\n", fileSize);
+		unsigned char dataRead[fileSize];	//stores data
+		
+		//is a file
+		if(attr == '1'){
+			printf("I'm a file %c\n", attr);
+			//loop until you find 0xffff
+			//read in current fat value at offset
+			//fseek(fp, (offset+FAT_OFFSET)*SECTOR_SIZE, SEEK_SET);
+			//fread(&fatVal, sizeof(unsigned short), 1, fp);
+			
+			//keep looping until stop condition -1 is read	
+			//while(fatVal != 0xFFFF){
+				//look for respective data region
+				fseek(fp, (offset+DATA_OFFSET)*SECTOR_SIZE, SEEK_SET);
+				//since we know the file size, read in all data assuming contiguous
+				fread(dataRead, sizeof(unsigned char), fileSize, fp);
+				
+				for(i = 0; i < fileSize; i++){
+					printf("dataRead[%d]: %c\n", i, dataRead[i]);
+				}
+				//update fat val
+				
+			//}
+			
+			
+			//while(offset != 0xFFFF){
+				//read in data at offset
+
+				//go through fat path
+				//fseek(fp, i, SEEK_SET);
+			//}
+		} else if(attr == '0'){ //attr is a directory keep going
+			printf("I'm a directory %c\n", attr);
+		} else {
+			printf("error no such attribute for file/directory\n");
+		}
+	} else {
+		printf("Error, no such file or directory, offset was -1\n");
+	}
+	
+	
+	
+	
 	//while(){
 		//call findEntry() and copy over entry into metadata
 		//if dir where size > 1
 		startOffset = DATA_OFFSET + i; //TODO locate this and return from traverse
 		endOffset = END;
+		
 		//else if file is 1
+		
+		
+		//distinguish between file and directory if attr = 1 or 0 return start cluster 
+		//based on that info.
+		
+		//take into consideration if instruction is 0xFFFF or not
 		
 		//if ((size - i) == 1)
 	//}
@@ -190,64 +269,51 @@ void traverse(FILE* fp, char* dir_files[], int size){
 
 //TODO
 /*
- * This function finds specific entries of metadata of the current file/directory in the data  
- * region and returns the sector number on success, -1 otherwise
+ * This function finds specific entries from fat of the current file/directory in the data  
+ * region and returns fat entry on success, -1 otherwise
  */
-void findEntry(FILE* fp, int s_offset, int e_offset, char* name){
+int findEntry(FILE* fp, int s_offset, int e_offset, char* name, char* metadata){
 	printf("findEntry() called\n");
 	int i;
-	int j;
-	int byteLocation = -1;
 	int entrySize = 32;			//each file or directory entry is 32 bytes big
-	//unsigned char bytes_read[entrySize];	//read in first 32 bytes into this array
-	
-	int nameLength = 8;
-	char bytes_read[entrySize];
+	int nameLength = 8;			//file name length
+	unsigned short val;
+	int offset = -1;
+
+	unsigned char bytes_read[entrySize];
 	char fileName[nameLength];
-	//scan for 'occupied' field and compare to 0
+	//scan directory for matching entry specified by filename
 	for(i = s_offset*SECTOR_SIZE; i <= e_offset*SECTOR_SIZE; i+=32){
 		printf("dir/file entry location in bytes = %d\n", i);
-		//scan every 32 bytes
-		fseek(fp, i, SEEK_SET);
+		fseek(fp, i, SEEK_SET);										//scan every 32 bytes
 		printf("ftell(); %ld\n", ftell(fp));
-		fread(bytes_read, sizeof(unsigned char), entrySize, fp);	//read into array
-		
-		//copy over /concatenate  string of first 8 characters
-		
-		for(j = 0; j < nameLength; j++){
-			fileName[j] = bytes_read[j];
-			printf("fileName[j] = %c\n", fileName[j]);
-		}
-		printf("%s.\n", fileName);
-		printf("%s.\n", name);
-		//if 'occupied' field bit  is 1, then it is free, else move on 
-		//compare file names, attr, ext, and starting cluster
-		char attr = bytes_read[25];
-		printf("comparing %d\n", strcmp(fileName, name));
-		
-		//starting cluster is 27, 28
+		fread(bytes_read, sizeof(unsigned char), entrySize, fp);	//read into array 32 bytes
+	
+		copyArrays(fileName, bytes_read, nameLength); 	//read into char array filename
+		copyArrays(metadata, bytes_read, entrySize);	//read into char array copy of meta data
+
+		//Read in starting cluster which is 27, 28. Use memcpy to read into unsigned short
 		unsigned char temp[2];
 		temp[1] = bytes_read[27];
 		temp[2] = bytes_read[28];
 		printf("temp = %s\n", temp);
-		unsigned short val;
-		//val = temp;
+		memcpy(&val, temp, sizeof(val));
 		printf("starting cluster: %hd\n", val);
-		
-		//file name matches 
-		if(strcmp(fileName, name) == 0){
-			printf("It's a match\n");
-		}
-		//attribute 1 = file, attr 0 = dir
-		if(attr == 1){
-			printf("bytes_read[25]: %c\n", bytes_read[25]);
+	
+		//get file comparison
+		int fileMatch = strcmp(fileName, name);
+		//compare file names, attr, ext, and starting cluster
+		if(fileMatch == 0){
 			printf("SUCCESS!!!\n");
-			//byteLocation = i;
+			//offset from fat = sector offset from data region
+			offset = val - SECTOR_SIZE; 
+			printf("offset is %d\n", offset);
 			break;
-		} else{
+		} else {
 			printf("No. not here. Such fail. %c\n", bytes_read[25]);
 		}
 	}
+	return offset;
 }
 
 /*
@@ -356,7 +422,7 @@ void mapFatData(FILE* fp, struct RD* r, char data[], int fatLocation){
 			fwrite(&dummy, sizeof(char), 1, fp);
 			printf("wrote empty file to fat\n");
 		}
-	} else {
+	} else {		//nonempty file
 		//loop around the sectors and write
 		for(i = 0; i < sectorCount; i++){
 			//find the next empty entry in fat table
