@@ -2,14 +2,16 @@
 #include <stdlib.h>
 #include <time.h>	
 #include <string.h>
+#include <libgen.h>
 #include "fat.h"
+
+
 #define SECTOR_SIZE 512
 #define CLUSTER_SIZE 1024;
 #define VBR_OFFSET 0
 #define FAT_OFFSET 1
 #define RD_OFFSET 121
-#define DataRD_OFFSET 153
-#define DATA_OFFSET 665
+#define DATA_OFFSET 153
 #define END 4096
 #define BYTE_FAT 2
 
@@ -22,15 +24,17 @@ void myWrite();
 void myRead();
 void mapFatData(FILE*, struct RD*, char[], int);
 int countFileSectorSize(FILE*, struct RD*);
-void parseCmd(char*, char*[]);
+void parseCmd(char*, char*[], char*);
 int countDelim(char*, char);
 void copyDataToArr(char*,int, char[][SECTOR_SIZE], int);
 int findEmptySector(FILE*, int, int);
 int findEmptyEntry(FILE*, int, int);
 int findFreeDirFileEntry(FILE*, int, int);
 void getDateTime(struct RD*);
-void findEntry(FILE*, int , int, char*[]);
+char* getFileName(char*, char*);
+
 void traverse(FILE*, char*[], int);
+void findEntry(FILE*, int , int, char*);
 
 unsigned short BPS; 
 unsigned short totalSectors;
@@ -44,22 +48,61 @@ int currently_written_sector;
 
 int main(){
 	FILE* fp = fopen("Drive2MB", "r+");
-	fillReservedSec(fp);
-	myCreate(fp);
+	
 	
 	//assume format is " ../.. where '/' can't be at end
-	/*
-	char input[] = "home/testing/file.txt";	
-	int numDirFiles = countDelim(input, '/');	
+	
+	int i;
+	char input[] = "Testing.txt";	
+	//make a copy of input before string manipulations
+	char* input2 = (char *) malloc(strlen(input)+1);
+	strcpy(input2, input);
+	
+	//get file name
+	char* bname = getFileName(input, bname);
+	printf("basename: %s\n", bname);
+	//store separated file name and extension 
+	char* fileName[2];
+	//populate array and remove .
+	parseCmd(bname, fileName, ".");
+	printf("fileName[0] %s\n", fileName[0]);
+	printf("file path: %s\n", input);
+	
+	//get number of directory/files
+	int numDirFiles = countDelim(input2, '/');	
 	printf("%d\n", numDirFiles);	
+	//create directoryfiles array separating the names 
 	char* dir_files[numDirFiles];
-	parseCmd(input, dir_files);
+	//populate array and remove slashes
+	parseCmd(input2, dir_files, "/");
 	printf("dir_files[0] = %s\n", dir_files[0]);
+
+	//replace with file extension with filename
+	dir_files[numDirFiles-1] = fileName[0];
+	for(i = 0; i < numDirFiles; i++){
+		printf("%s\n", dir_files[i]);
+	}
+
+	traverse(fp, dir_files, numDirFiles);
 	
-	*/
 	
+	
+	
+	
+	
+	//fillReservedSec(fp);
+	//myCreate(fp);
 	fclose(fp);
 	return 0;
+}
+
+/*
+ * This function returns the filename from a directory path.
+ */
+char* getFileName(char* path, char* bname){
+	char* path2 = strdup(path);
+	bname = basename(path2);
+	return bname;
 }
 
 /*
@@ -79,29 +122,52 @@ void fillReservedSec(FILE* fp){
 	printf("wrote to disk\n");
 }
 
-//TODO
-void traverse(FILE* fp, char* dir_files[], int size){
-	int i;
-	int offset = RD_OFFSET;
-	unsigned char metadata[32];
-	for(i = 0; i < size; i++){
-		//call findEntry() and copy over entry into metadata
-		
-		
-	}
-}
+//LOOK UP DIRECTORY ENTRY and size of file
+//LOOK UP FAT 
+//LOOK IN DATA SECTIOn
+//READ DATA
+
 
 //TODO
-void findEntry(FILE* fp, int s_offset, int e_offset, char* bytes_read[]){
+/*
+ * This function traverses through directories to find the file location
+ */
+void traverse(FILE* fp, char* dir_files[], int size){
+	int i;
+	int startOffset = RD_OFFSET;
+	int endOffset = DATA_OFFSET - 1;
+	unsigned char metadata[32];
+	//findEntry() 
+	findEntry(fp, startOffset, endOffset, dir_files[0]);
+	//while(){
+		//call findEntry() and copy over entry into metadata
+		//if dir where size > 1
+		startOffset = DATA_OFFSET + i; //TODO locate this and return from traverse
+		endOffset = END;
+		//else if file is 1
+		
+		//if ((size - i) == 1)
+	//}
+}
+
+
+
+//TODO
+/*
+ * This function finds specific entries of metadata of the current file/directory returns 
+ * a true if found, false otherwise
+ */
+void findEntry(FILE* fp, int s_offset, int e_offset, char* name){
 	printf("findEntry() called\n");
 	int i;
 	int j;
 	int byteLocation = -1;
 	int entrySize = 32;			//each file or directory entry is 32 bytes big
 	//unsigned char bytes_read[entrySize];	//read in first 32 bytes into this array
-	char* arr[entrySize];
+	
 	int nameLength = 8;
-	char* fileName[nameLength];
+	char bytes_read[entrySize];
+	char fileName[nameLength];
 	//scan for 'occupied' field and compare to 0
 	for(i = s_offset*SECTOR_SIZE; i <= e_offset*SECTOR_SIZE; i+=32){
 		printf("dir/file entry location in bytes = %d\n", i);
@@ -111,20 +177,28 @@ void findEntry(FILE* fp, int s_offset, int e_offset, char* bytes_read[]){
 		fread(bytes_read, sizeof(unsigned char), entrySize, fp);	//read into array
 		
 		//copy over /concatenate  string of first 8 characters
+		
 		for(j = 0; j < nameLength; j++){
 			fileName[j] = bytes_read[j];
+			printf("fileName[j] = %c\n", fileName[j]);
 		}
+		printf("%s.\n", fileName);
+		printf("%s.\n", name);
 		//if 'occupied' field bit  is 1, then it is free, else move on 
-		if(*bytes_read[25] == '1'){
-			printf("SUCCESS!!!\n");
-			byteLocation = i;
-			break;
-		//} else if(bytes_read[25] == 1){
-		//	printf("directory ftell() %c %ld\n", bytes_read[25], ftell(fp));
-		} else{
-			//printf("No. not here. Such fail. %c\n", bytes_read[25]);
+		//compare file names, attr, ext, and starting cluster
+		char attr = bytes_read[25];
+		printf("comparing %d\n", strcmp(fileName, name));
+		if(strcmp(fileName, name) == 0){
+			printf("It's a match\n");
 		}
-		
+		if(attr == 1){
+			printf("bytes_read[25]: %c\n", bytes_read[25]);
+			printf("SUCCESS!!!\n");
+			//byteLocation = i;
+			break;
+		} else{
+			printf("No. not here. Such fail. %c\n", bytes_read[25]);
+		}
 	}
 }
 
@@ -201,6 +275,7 @@ int countFileSectorSize(FILE* fp, struct RD* entry){
 /*
  * This function writes to the fat and the data section, creating a mapping between the two.
  * data input is  segments at a time;
+ * Handles mapping for file/dir with or without data
  */
 void mapFatData(FILE* fp, struct RD* r, char data[], int fatLocation){
 	//get number of sectors to write data
@@ -465,9 +540,10 @@ void getDateTime(struct RD* rd){
  * Postconditions:                                                                           *
  * @return void                                                                              *
  *********************************************************************************************/
-void parseCmd(char* input, char* arr[]){
+void parseCmd(char* input, char* arr[], char* delim){
    char* token;
-   const char delimiter[2] = "/";
+   char delimiter[2];
+   strcpy(delimiter, delim);
    int i = 0;
    //Get the first token turning the first slash to a Null character
    token = strtok(input, delimiter);
