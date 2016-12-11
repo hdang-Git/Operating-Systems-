@@ -2,9 +2,10 @@
 #include <stdlib.h>
 #include <time.h>	
 #include <string.h>
+#include <ctype.h>
 #include <libgen.h>
+#include <errno.h>
 #include "fat.h"
-
 
 #define SECTOR_SIZE 512
 #define CLUSTER_SIZE 1024;
@@ -17,49 +18,181 @@
 
 //function prototypes
 void fillReservedSec(FILE*);
-void myCreate(FILE*);
+void myCreate(FILE*, char*, char*, char, int, char*);
 void writeToFat(FILE*, unsigned short*, int);
 void writeToData(FILE*, char*, int);
-void myWrite();
-void myRead();
+void myWrite(FILE*, char*);
+void myRead(FILE*, char*);
 void mapFatData(FILE*, struct RD*, char[], int);
 int countFileSectorSize(FILE*, struct RD*);
 void parseCmd(char*, char*[], char*);
 int countDelim(char*, char);
+int verifyInput(char*);
 void copyDataToArr(char*,int, char[][SECTOR_SIZE], int);
 int findEmptySector(FILE*, int, int);
 int findEmptyEntry(FILE*, int, int);
 int findFreeDirFileEntry(FILE*, int, int);
 void getDateTime(struct RD*);
 char* getFileName(char*, char*);
-
+void append(FILE*, char*[]);
 void traverse(FILE*, char*[], int);
 int findEntry(FILE*, int , int, char*, char*);
-
+char* trim(char*, char);
 int countCharNum(FILE*);
 void readData(FILE*, char[], int);
 void copyArrays(char*, char*, int);
+void printPrompt();
+void chooseOption(FILE*, int, char*);
+int check(char*[], int, char*[]);
+void createEmptyFile(FILE*, char*);
+void createEmptyDir(FILE*, char*);
 
 
 unsigned short BPS; 
 unsigned short totalSectors;
 int currently_written_sector;
 
-/*
-	CALCULATION NOTES:
- 	2MB = 2,097,152 bytes  = 4096 sectors   
- 	max number of blocks for data for fat alone: 3431 or 0xD67
- */
 
+
+/*********************************************************************************************
+ * This function calls on the operations needed to read/write from the virtual dre along     *
+ * with related string parsing.                                                              *
+ *                                                                                           *
+ *	CALCULATION NOTES:                                                                       *
+ *	2MB = 2,097,152 bytes  = 4096 sectors                                                    *
+ *	max number of blocks for data for fat alone: 3431 or 0xD67                               *
+ * 			//assume format is " ../.. where '/' can't be at end							 *
+ *********************************************************************************************/
 int main(){
 	
 	FILE* fp = fopen("Drive2MB", "r+");
-	
-	
-	//assume format is " ../.. where '/' can't be at end
-	
+	fillReservedSec(fp);
+	//myWrite(fp, "test1.txt");
+	//createEmptyFile(fp, "Hello.txt");
+	//createEmptyDir(fp, "Documents");
+	myRead(fp, "test1.txt");
+	/*
+	//myCreate(fp);
+    char* inputCmd = NULL;							//store user command
+    int bytesRead; 									//# of bytes read from getline() func
+    size_t inSize = 100;							//size of input from getLine() func
+   	int i;
+   	char* fs_cmd[] = {"create", "createDir", "write", "read", "\0"}; 
+   	
+   	while(1){ 
+   		printPrompt();
+   		bytesRead = getline(&inputCmd,&inSize,stdin); //get user input and the error code
+   		if(bytesRead == -1){	//if Error reading, send a error msg to user
+          printf("Error! %d\n", bytesRead);	
+      	} else if(verifyInput(inputCmd)){				//Do nothing
+      	} else {
+
+   			inputCmd = trim(inputCmd, ' ');			//get rid of leading & trailing spaces
+        	int size = countDelim(inputCmd, ' ');	//count the # of args delimited by spaces
+        	char* cmd[size];						//create array with size of # of args
+        	parseCmd(inputCmd,cmd, " ");			//parse input into each index of array cmd
+
+			int num = check(cmd, size, fs_cmd); 
+			printf("num: %d\n", num);
+        	chooseOption(fp, num+1, cmd[1]);
+   		}
+    }
+    */
+	fclose(fp);
+	return 0;
+}
+
+void printPrompt(){
+	printf("\n\n\n\n");
+	printf("**************************************************************************\n");
+	printf("Please type in file system commands for those listed below ");
+	printf("\nin the following format:\n");
+	printf("- create <file name>\n");
+	printf("- createDir <directory name>\n");
+	printf("- write <externalfile.txt> - writes external file into the file system\n");
+	printf("- read  <path>|<filename> - reads from disk the data of that specific file\n");
+	printf("CTRL-C to exit\n");
+	printf("**************************************************************************\n\n");
+}
+
+
+/*********************************************************************************************
+ * This function chooses what to function to perform on the file system                      *
+ *********************************************************************************************/
+void chooseOption(FILE* fp, int choice, char* fileName){
+	switch(choice){
+		case 1 	:	createEmptyFile(fp, fileName);
+					break;
+		case 2	:	createEmptyDir(fp, fileName);
+					break;
+		case 3  :	myWrite(fp, fileName);
+					break;
+		case 4	:	myRead(fp, fileName);
+		default :	printf("Command DNE\n");
+					break; 
+		
+	}
+}
+
+
+/*********************************************************************************************
+ * This function checks if the passed string is a valid file system command or not.          *
+ *                                                                                           *
+ * Preconditions:                                                                            *
+ * @params input[] - stores command in first index with optional command options in rest     * 
+ * @params size - size of the input[] array                                                  *
+ * @params fs_cmd[] - list of valid file system commands                                     *
+ * Postconditions:                                                                           *
+ * @return valid flag that tells if it is a file system command or not                       *
+ *********************************************************************************************/
+int check(char* input[], int size, char* fs_cmd[]){
+    int i;
+    int index = -1;
+    //Loop through commands and compare against user input
+    for(i = 0; strcmp(fs_cmd[i],"\0") != 0; i++){
+    	//if the first user argument is in the list of builtins
+    	if(strcmp(input[0], fs_cmd[i]) == 0){
+    		index = i;									//Retrieve index in built_in array 
+    	}
+    } 
+   return index;
+}
+
+/*********************************************************************************************
+ * This function writes extenral data to the file system.                                    *
+ *********************************************************************************************/
+void myWrite(FILE* fp, char* name){
+	printf("Opening %s\n", name);
+	FILE* inputFile = fopen(name, "r+");
+	if(inputFile != NULL){
+		int fileSize = countCharNum(inputFile);
+		printf("fileSize: %d\n", fileSize);
+		char fileData[fileSize];
+		readData(inputFile, fileData, fileSize);
+		
+		//get file name
+		char* bname = getFileName(name, bname);
+		printf("basename: %s\n", bname);
+		//store separated file name and extension 
+		char* fileName[2];
+		//populate array and remove .
+		parseCmd(bname, fileName, ".");
+		//call myCreate() to write to file all data
+		myCreate(fp, fileName[0], fileName[1],'1', fileSize, fileData);
+	} else {
+		perror("Error opening file");
+	}
+		
+}
+
+/*********************************************************************************************
+ * This function reads data from the file system and displays to screen.                     *
+ *********************************************************************************************/
+void myRead(FILE* fp, char* input){
+	printf("myRead() called\n");
+	//char input[] = "Testing.txt";	
+
 	int i;
-	char input[] = "Testing.txt";	
 	//make a copy of input before string manipulations
 	char* input2 = (char *) malloc(strlen(input)+1);
 	strcpy(input2, input);
@@ -88,39 +221,55 @@ int main(){
 	for(i = 0; i < numDirFiles; i++){
 		printf("%s\n", dir_files[i]);
 	}
-
+	//read in data
 	traverse(fp, dir_files, numDirFiles);
-	
-	
-	/*
-	//Opening a file for input
-	FILE* inputFile = fopen("test1.txt", "r+");
-	int fileSize = countCharNum(inputFile);
-	printf("fileSize: %d\n", fileSize);
-	char fileData[fileSize];
-	readData(inputFile, fileData, fileSize);
-	*/
-	//fillReservedSec(fp);
-	//myCreate(fp);
-	//fclose(fp);
-	return 0;
 }
 
+/*********************************************************************************************
+ * This function creates an empty file in the file system.                                   *
+ *********************************************************************************************/
+void createEmptyFile(FILE* fp, char* name){
+	printf("createEmptyFile() called\n");
+	//get file name
+	char* bname = getFileName(name, bname);
+	printf("basename: %s\n", bname);
+	//store separated file name and extension 
+	char* fileName[2];
+	//populate array and remove .
+	parseCmd(bname, fileName, ".");
+	//call myCreate() to write to file all data
+	myCreate(fp, fileName[0], fileName[1],'1', 0, "");
+	
+}
+/*********************************************************************************************
+ * This function creates an empty directory in the file system.                              *
+ *********************************************************************************************/
+void createEmptyDir(FILE* fp, char* name){
+	printf("createEmptyDir() called\n");
+	//get file name
+	char* bname = getFileName(name, bname);
+	printf("basename: %s\n", bname);
+	//store separated file name and extension 
+	char* fileName[2];
+	//populate array and remove .
+	parseCmd(bname, fileName, ".");
+	//call myCreate() to write to file all data
+	myCreate(fp, fileName[0], "   ", '0', 0, "");
+}
 
-
-/*
- * This function returns the filename from a directory path.
- */
+/*********************************************************************************************
+ * This function returns the filename from a directory path.                                 *
+ *********************************************************************************************/
 char* getFileName(char* path, char* bname){
 	char* path2 = strdup(path);
 	bname = basename(path2);
 	return bname;
 }
 
-/*
- * This function counts the number of characters in the data file.
- * Use case is to get size of array dynamically at runtime.
- */
+/*********************************************************************************************
+ * This function counts the number of characters in the data file.                           *
+ * Use case is to get size of array dynamically at runtime.                                  *
+ *********************************************************************************************/
 int countCharNum(FILE* file){
 	rewind(file);
 	char c;
@@ -128,7 +277,7 @@ int countCharNum(FILE* file){
 	while((c = fgetc(file))){
 		if(c != EOF){
 			count++;
-			printf("character %c count %d\n", c, count);
+			//printf("character %c count %d\n", c, count);
 		} else {
 			break;
 		}
@@ -136,9 +285,9 @@ int countCharNum(FILE* file){
 	return count;
 }
 
-/*
- * This function reads in a data file into a char array.
- */
+/*********************************************************************************************
+ * This function reads in a data file into a char array.                                     *
+ *********************************************************************************************/
 void readData(FILE* file, char arr[], int size){
 	rewind(file);
 	int i;
@@ -148,9 +297,9 @@ void readData(FILE* file, char arr[], int size){
 	}
 }
 
-/*
- * This function copies one array into the other assuming that they are the same size.
- */
+/*********************************************************************************************
+ * This function copies one array into the other assuming that they are the same size.       *
+ *********************************************************************************************/
 void copyArrays(char* src, char* dest, int size){
 	int i;
 	for(i = 0; i < size; i++){
@@ -159,9 +308,9 @@ void copyArrays(char* src, char* dest, int size){
 }
 
 
-/*
- * This function writes to the boot sector and sets the global variables.
- */
+/*********************************************************************************************
+ * This function writes to the boot sector and sets the global variables.                    *
+ *********************************************************************************************/
 void fillReservedSec(FILE* fp){
 	struct VBR* v = malloc(sizeof(struct VBR));
 	v->BPS = SECTOR_SIZE;
@@ -176,16 +325,10 @@ void fillReservedSec(FILE* fp){
 	printf("wrote to disk\n");
 }
 
-//LOOK UP DIRECTORY ENTRY and size of file
-//LOOK UP FAT 
-//LOOK IN DATA SECTIOn
-//READ DATA
-
-
-//TODO
-/*
- * This function traverses through directories to find the file location
- */
+//TODO: refactor into smaller methods
+/*********************************************************************************************
+ * This function traverses through directories to find the file location                   
+ *********************************************************************************************/
 void traverse(FILE* fp, char* dir_files[], int size){
 	int i;
 	int startOffset = RD_OFFSET;
@@ -199,42 +342,36 @@ void traverse(FILE* fp, char* dir_files[], int size){
 	int offset = findEntry(fp, startOffset, endOffset, dir_files[0], metadata);
 	printf("offset %d\n", offset);
 	if(offset != -1){
-		attr = metadata[12];
-
+		//get file type, dir or file
+		attr = metadata[11];
 		//get file size via byte manipulation 
 		fileSize += metadata[28] | (metadata[29]<<8) | (metadata[30]<<16) | (metadata[31]<<24);
 		printf("fileSize %d\n", fileSize);
-		unsigned char dataRead[fileSize];	//stores data
+		unsigned char dataRead[fileSize];	//stores data to read
 		
-		//is a file
-		if(attr == '1'){
+		//TODO: reimplement to handle noncontiguous files
+		if(attr == '1'){		//if is a file
 			printf("I'm a file %c\n", attr);
-			//loop until you find 0xffff
-			//read in current fat value at offset
-			//fseek(fp, (offset+FAT_OFFSET)*SECTOR_SIZE, SEEK_SET);
-			//fread(&fatVal, sizeof(unsigned short), 1, fp);
+		//loop until you find 0xffff
+		//read in current fat value at offset
+		//fseek(fp, (offset+FAT_OFFSET)*SECTOR_SIZE, SEEK_SET);
+		//fread(&fatVal, sizeof(unsigned short), 1, fp);
 			
-			//keep looping until stop condition -1 is read	
-			//while(fatVal != 0xFFFF){
-				//look for respective data region
-				fseek(fp, (offset+DATA_OFFSET)*SECTOR_SIZE, SEEK_SET);
-				//since we know the file size, read in all data assuming contiguous
-				fread(dataRead, sizeof(unsigned char), fileSize, fp);
-				
-				for(i = 0; i < fileSize; i++){
-					printf("dataRead[%d]: %c\n", i, dataRead[i]);
-				}
-				//update fat val
-				
-			//}
-			
-			
-			//while(offset != 0xFFFF){
-				//read in data at offset
+		//keep looping until stop condition -1 is read	
+		//do{
+			//look for respective data region from 1-to-1 mapping
+			fseek(fp, (offset+DATA_OFFSET)*SECTOR_SIZE, SEEK_SET);
+			//since we know the file size, read in all data assuming contiguous
+			fread(dataRead, sizeof(unsigned char), fileSize, fp);
+			/*
+			for(i = 0; i < fileSize; i++){
+				printf("dataRead[%d]: %c\n", i, dataRead[i]);
+			}
+			*/
+			printf("input:\n %s\n", dataRead);
 
-				//go through fat path
-				//fseek(fp, i, SEEK_SET);
-			//}
+			//update fat val
+		//}while(fatVal != 0xFFFF)		
 		} else if(attr == '0'){ //attr is a directory keep going
 			printf("I'm a directory %c\n", attr);
 		} else {
@@ -243,41 +380,21 @@ void traverse(FILE* fp, char* dir_files[], int size){
 	} else {
 		printf("Error, no such file or directory, offset was -1\n");
 	}
-	
-	
-	
-	
-	//while(){
-		//call findEntry() and copy over entry into metadata
-		//if dir where size > 1
-		startOffset = DATA_OFFSET + i; //TODO locate this and return from traverse
-		endOffset = END;
-		
-		//else if file is 1
-		
-		
-		//distinguish between file and directory if attr = 1 or 0 return start cluster 
-		//based on that info.
-		
-		//take into consideration if instruction is 0xFFFF or not
-		
-		//if ((size - i) == 1)
-	//}
 }
 
 
 
-//TODO
-/*
- * This function finds specific entries from fat of the current file/directory in the data  
- * region and returns fat entry on success, -1 otherwise
- */
+//TODO: refactor into smaller methods
+/*********************************************************************************************
+ * This function finds specific entries from fat of the current file/directory in the data   *
+ * region and returns fat entry on success, -1 otherwise                                     *
+ *********************************************************************************************/
 int findEntry(FILE* fp, int s_offset, int e_offset, char* name, char* metadata){
 	printf("findEntry() called\n");
 	int i;
 	int entrySize = 32;			//each file or directory entry is 32 bytes big
 	int nameLength = 8;			//file name length
-	unsigned short val;
+	unsigned short val = 0;
 	int offset = -1;
 
 	unsigned char bytes_read[entrySize];
@@ -286,20 +403,23 @@ int findEntry(FILE* fp, int s_offset, int e_offset, char* name, char* metadata){
 	for(i = s_offset*SECTOR_SIZE; i <= e_offset*SECTOR_SIZE; i+=32){
 		printf("dir/file entry location in bytes = %d\n", i);
 		fseek(fp, i, SEEK_SET);										//scan every 32 bytes
-		printf("ftell(); %ld\n", ftell(fp));
+		//printf("ftell(); %ld\n", ftell(fp));
 		fread(bytes_read, sizeof(unsigned char), entrySize, fp);	//read into array 32 bytes
-	
 		copyArrays(fileName, bytes_read, nameLength); 	//read into char array filename
 		copyArrays(metadata, bytes_read, entrySize);	//read into char array copy of meta data
 
-		//Read in starting cluster which is 27, 28. Use memcpy to read into unsigned short
+		//Read in starting cluster which is 26, 27. Use memcpy to read into unsigned short
+		/*
 		unsigned char temp[2];
-		temp[1] = bytes_read[27];
-		temp[2] = bytes_read[28];
+		temp[1] = bytes_read[26];
+		temp[2] = bytes_read[27];
+		printf("%c%c\n", bytes_read[26], bytes_read[27]);
 		printf("temp = %s\n", temp);
 		memcpy(&val, temp, sizeof(val));
 		printf("starting cluster: %hd\n", val);
-	
+		*/
+		val += bytes_read[26] | (bytes_read[27]<<8);
+		printf("starting cluster: %hd\n", val);
 		//get file comparison
 		int fileMatch = strcmp(fileName, name);
 		//compare file names, attr, ext, and starting cluster
@@ -310,16 +430,18 @@ int findEntry(FILE* fp, int s_offset, int e_offset, char* name, char* metadata){
 			printf("offset is %d\n", offset);
 			break;
 		} else {
-			printf("No. not here. Such fail. %c\n", bytes_read[25]);
+			printf("No, not here.%c\n", bytes_read[25]);
 		}
 	}
-	return offset;
+	return offset; 
 }
 
-/*
- * Can create empty files and directories
- */
-void myCreate(FILE* fp){
+
+//TODO: refactor into smaller methods
+/*********************************************************************************************
+ * Can create empty files and directories and duplicate existing files with data             *
+ *********************************************************************************************/
+void myCreate(FILE* fp, char* fname, char* extName, char attr, int fileSize, char* data){
 	printf("myCreate(): \n");
 	//find free entry in root directory and return location
 	int location = findFreeDirFileEntry(fp, RD_OFFSET, DATA_OFFSET-1);
@@ -332,27 +454,27 @@ void myCreate(FILE* fp){
 	
 	//if entry space exists and aren't being used
 	if(location != -1 && fatLocation != -1){
-		//printf("Root directory is found + %d\n", location);
 		//Create file/dir struct
 		struct RD* r = malloc(sizeof(struct RD));
-		strcpy(r->filename, "Testing");
-		strcpy(r->ext, "txt");
-		r->attr = 0;		//set as a file
-		getDateTime(r);		//set datetime
-		//printf("date time %s\n",r->datetime);
-		r->occupied=1;		//set as occupied 
+		strcpy(r->filename, fname);
+		strcpy(r->ext, extName);		
+		r->attr = attr;					//set as a file or as directory
+		getDateTime(r);					//set datetime
+
+		r->occupied='1';				//set as occupied 
 		r->startCluster = fatLocation;	//store fat byte address entry 
-		r->fileSize = 48; //0; //1322;
+		r->fileSize = fileSize; //0; //1322;
 		
 		//if it is a directory type 
 		//point to an empty sector as usual in startcluster
 		//write directory field there
 		
 		//test input data from text file
-		char* dataTest = "HELLO BLA BLAH BLAH TESTING OKAY WHATEVER PEACE.";
+		//char* dataTest = "HELLO BLA BLAH BLAH TESTING OKAY WHATEVER PEACE.";
 		//dataTest = "";
-		char data[r->fileSize];
-		strcpy(data, dataTest);
+		
+		//char data[r->fileSize];
+		//strcpy(data, fileData);
 		
 		//write the file struct into the root directory 
 		fseek(fp, location, SEEK_SET);
@@ -371,9 +493,9 @@ void myCreate(FILE* fp){
 }
 
 
-/*
- * This function counts number of sectors to write to.
- */
+/*********************************************************************************************
+ * This function counts number of sectors to write to returning the sector count.            *
+ *********************************************************************************************/
 int countFileSectorSize(FILE* fp, struct RD* entry){
 	int size = entry->fileSize;
 	int count = 0; //default assume 0 sectors
@@ -386,11 +508,12 @@ int countFileSectorSize(FILE* fp, struct RD* entry){
 	return count;
 }
 
-/*
- * This function writes to the fat and the data section, creating a mapping between the two.
- * data input is  segments at a time;
- * Handles mapping for file/dir with or without data
- */
+//TODO: refactor into smaller methods & reimplement other write functions
+/*********************************************************************************************
+ * This function writes to the fat and the data section, creating a mapping between the two. *
+ * data input is  segments at a time;                                                        *
+ * Handles mapping for file/dir with or without data                                         *
+ *********************************************************************************************/
 void mapFatData(FILE* fp, struct RD* r, char data[], int fatLocation){
 	//get number of sectors to write data
 	int sectorCount = countFileSectorSize(fp, r);
@@ -422,7 +545,7 @@ void mapFatData(FILE* fp, struct RD* r, char data[], int fatLocation){
 			fwrite(&dummy, sizeof(char), 1, fp);
 			printf("wrote empty file to fat\n");
 		}
-	} else {		//nonempty file
+	} else {		//write nonempty file
 		//loop around the sectors and write
 		for(i = 0; i < sectorCount; i++){
 			//find the next empty entry in fat table
@@ -467,10 +590,10 @@ void mapFatData(FILE* fp, struct RD* r, char data[], int fatLocation){
 }
 
 
-/*
- * This function copies data from one array to the the array blocks where length is the 
- * length of data.
- */
+/*********************************************************************************************
+ * This function copies data from one array to the the array blocks where length is the      *
+ * length of data. If any size is less than 512, the rest of it is 0 so as to not            *
+ *********************************************************************************************/
 void copyDataToArr(char data[], int sectorCount, char block[][SECTOR_SIZE], int length)
 {
 	printf("copyDataToArr() called.\n");
@@ -498,19 +621,19 @@ void copyDataToArr(char data[], int sectorCount, char block[][SECTOR_SIZE], int 
 	}
 }
 
-/*
- * This function writes to the Fat the next fat entry as a unsigned short 
- * in the current fat position
- */
+/*********************************************************************************************
+ * This function writes to the Fat the next fat entry as a unsigned short                    *
+ * in the current fat position                                                               *
+ *********************************************************************************************/
 void writeToFat(FILE* fp, unsigned short* data, int location){
 	printf("writeToFat() called to location %d, sector %d\n", location, location/SECTOR_SIZE);
 	fseek(fp, location, SEEK_SET);
 	fwrite(&data, sizeof(unsigned short), 1, fp);
 }
 
-/*
- * This function writes to the data section an array of char of size 512.
- */
+/*********************************************************************************************
+ * This function writes to the data section an array of char of size 512.                    *
+ *********************************************************************************************/
 void writeToData(FILE* fp, char* data, int location){
 	printf("writeToData() called to location %d, sector %d\n", location, location/SECTOR_SIZE);
 	fseek(fp, location, SEEK_SET);
@@ -518,35 +641,11 @@ void writeToData(FILE* fp, char* data, int location){
 }
 
 
-void myread(){
-	//have a method that counts number of '/'
-	//create array of with size = # of '/' + 1
-	//if has '/' in it
-		//call method to token array
-		////parse directories and filename into an array (tokenize it)
-		//strcpy into a local array knowing length
-		//also make sure each element is a char array
-		//Loop search through directories (attr == 1) by comparing names
-			//if name matches, and not last element of array 
-				//go to next directory 
-			//if at end of array
-				//look for file
-			//else error message for unknown directory name
-	////////////////////////////////////////////////////////////////////////////
-	//Simple read
-	//locate file name
-	//loop read in root directory entries
-		//compare file name to file names in root directory
-		//if success, 
-			
-		//else print error message
-	
-}
 
-/*
- * This function finds the empty sector in a data region. Used to write to data region. 
- * Returns the sector in bytes so must divide by SECTOR_NUMBER to get sector number. 
- */
+/*********************************************************************************************
+ * This function finds the empty sector in a data region. Used to write to data region.      *
+ * Returns the sector in bytes so must divide by SECTOR_NUMBER to get sector number.         *
+ *********************************************************************************************/
 int findEmptySector(FILE* fp, int start, int end){
 	printf("findEmptySector() called\n");
 	unsigned short temp = -1;
@@ -573,11 +672,11 @@ int findEmptySector(FILE* fp, int start, int end){
 }
 
 
-/*
- * This function finds the first empty byte entry in the region and returns the location.
- * The start and end offsets define the region boundaries.
- * start is defined as the start of one region, end is the start of the next region
- */
+/*********************************************************************************************
+ * This function finds the first empty byte entry in the region and returns the location.    *
+ * The start and end offsets define the region boundaries.                                   *
+ * start is defined as the start of one region, end is the start of the next region.         *
+ *********************************************************************************************/
 int findEmptyEntry(FILE* fp, int start, int end){
 	printf("findEmptyEntry() called\n");
 	unsigned short temp;
@@ -599,10 +698,10 @@ int findEmptyEntry(FILE* fp, int start, int end){
 	return byteLocation;
 }
 
-/*
- * This function finds an empty location in the root directory or directory structure by 
- * checking the occupied field in the virtual drive s.
- */
+/*********************************************************************************************
+ * This function finds an empty location in the root directory or directory structure by     *
+ * checking the occupied field in the virtual drive s.                                       *
+ *********************************************************************************************/
 int findFreeDirFileEntry(FILE* fp, int s_offset, int e_offset){
 	printf("findFreeDirFileEntry() called\n");
 	int i;
@@ -630,10 +729,10 @@ int findFreeDirFileEntry(FILE* fp, int s_offset, int e_offset){
 	return byteLocation;
 }
 
-/*
- * This function puts in the datetime into the struct element in the form HHMMSSMMDDYY.
- * The order is time first followed by date.
- */
+/*********************************************************************************************
+ * This function puts in the datetime into the struct element in the form HHMMSSMMDDYY.      *
+ * The order is time first followed by date.                                                 *
+ *********************************************************************************************/
 void getDateTime(struct RD* rd){
 	time_t rawtime;
 	struct tm *info;
@@ -692,5 +791,48 @@ int countDelim(char* input, char delim){
 	return count + 1;
 }
 
+/*********************************************************************************************
+ * This function checks user input to see if the command entered is for instance a newline,  *
+ * spaces, or characters that aren't alphanumeric and sets the flag to true.                 *
+ *                                                                                           *
+ * Preconditions:                                                                            *
+ * @params cmd - the command entered into terminal                                           *
+ * Postconditions:                                                                           *
+ * @return flag of true or false                                                             *
+ *********************************************************************************************/
+int verifyInput(char* cmd){
+	int flag = 1;				//flag up for \n, ' ', etc. 
+	while(*(cmd) != '\0'){		
+		if(isalpha(*(cmd))){	//if input contains any alphanumeric, set flag down
+			flag = 0; 
+		}
+		*(cmd)++;
+	}
+	return flag;
+}
 
-
+/*********************************************************************************************
+ * This function removes leading and trailing characters of the delimiter passed in,         *
+ * specifically white spaces for this program.                                               *
+ *                                                                                           *
+ * Preconditions:                                                                            *
+ * @params input - input string to change                                                    * 
+ * @params delim - character of delimiter to look for and remove                             *
+ * Postconditions:                                                                           *
+ * @return formatted string without trailing/leading delimiters                              *
+ *********************************************************************************************/
+char* trim(char* input, char delim){
+	//remove leading whitespace
+	while(*input == delim){		     			//Move from front to back of string 
+		input++;					 
+	}								
+	
+	//remove trailing whitespace
+	int length = strlen(input);
+	char* str = input + length - 1;
+	while(length > 0 && *input == delim){		//Move from back to front of string
+		str--;
+	}
+	*(str+1) = '\0';							//Add a null character at end
+	return input;
+}
