@@ -36,6 +36,9 @@ char* getFileName(char*, char*);
 void traverse(FILE*, char*[], int);
 void findEntry(FILE*, int , int, char*);
 
+int countCharNum(FILE*);
+void readData(FILE*, char[], int);
+
 unsigned short BPS; 
 unsigned short totalSectors;
 int currently_written_sector;
@@ -47,11 +50,12 @@ int currently_written_sector;
  */
 
 int main(){
+	
 	FILE* fp = fopen("Drive2MB", "r+");
 	
 	
 	//assume format is " ../.. where '/' can't be at end
-	
+	/*
 	int i;
 	char input[] = "Testing.txt";	
 	//make a copy of input before string manipulations
@@ -84,17 +88,24 @@ int main(){
 	}
 
 	traverse(fp, dir_files, numDirFiles);
+	*/
 	
 	
+	//Opening a file for input
+	FILE* inputFile = fopen("test1.txt", "r+");
 	
-	
-	
+	int fileSize = countCharNum(inputFile);
+	printf("fileSize: %d\n", fileSize);
+	char fileData[fileSize];
+	readData(inputFile, fileData, fileSize);
 	
 	//fillReservedSec(fp);
 	//myCreate(fp);
-	fclose(fp);
+	//fclose(fp);
 	return 0;
 }
+
+
 
 /*
  * This function returns the filename from a directory path.
@@ -104,6 +115,31 @@ char* getFileName(char* path, char* bname){
 	bname = basename(path2);
 	return bname;
 }
+
+int countCharNum(FILE* file){
+	rewind(file);
+	char c;
+	int count = 0;
+	while((c = fgetc(file))){
+		if(c != EOF){
+			count++;
+			printf("character %c count %d\n", c, count);
+		} else {
+			break;
+		}
+	}
+	return count;
+}
+
+void readData(FILE* file, char arr[], int size){
+	rewind(file);
+	int i;
+	for(i = 0; i < size; i++){
+		arr[i] = fgetc(file);
+		printf("arr[%d] = %c\n", i, arr[i]);
+	}
+}
+
 
 /*
  * This function writes to the boot sector and sets the global variables.
@@ -154,8 +190,8 @@ void traverse(FILE* fp, char* dir_files[], int size){
 
 //TODO
 /*
- * This function finds specific entries of metadata of the current file/directory returns 
- * a true if found, false otherwise
+ * This function finds specific entries of metadata of the current file/directory in the data  
+ * region and returns the sector number on success, -1 otherwise
  */
 void findEntry(FILE* fp, int s_offset, int e_offset, char* name){
 	printf("findEntry() called\n");
@@ -188,9 +224,21 @@ void findEntry(FILE* fp, int s_offset, int e_offset, char* name){
 		//compare file names, attr, ext, and starting cluster
 		char attr = bytes_read[25];
 		printf("comparing %d\n", strcmp(fileName, name));
+		
+		//starting cluster is 27, 28
+		unsigned char temp[2];
+		temp[1] = bytes_read[27];
+		temp[2] = bytes_read[28];
+		printf("temp = %s\n", temp);
+		unsigned short val;
+		//val = temp;
+		printf("starting cluster: %hd\n", val);
+		
+		//file name matches 
 		if(strcmp(fileName, name) == 0){
 			printf("It's a match\n");
 		}
+		//attribute 1 = file, attr 0 = dir
 		if(attr == 1){
 			printf("bytes_read[25]: %c\n", bytes_read[25]);
 			printf("SUCCESS!!!\n");
