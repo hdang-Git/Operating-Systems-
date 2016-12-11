@@ -69,12 +69,12 @@ int main(){
 	
 	FILE* fp = fopen("Drive2MB", "r+");
 	fillReservedSec(fp);
-	myWrite(fp, "test1.txt");
+	//myWrite(fp, "test1.txt");
 	//createEmptyFile(fp, "Hello.txt");
 	//createEmptyDir(fp, "Documents");
-	myRead(fp, "test1.txt");
+	//myRead(fp, "test1.txt");
 	//char* data = "HELLO WHAT'S UP DOC?";
-	//addToEmptyFile(fp, "Hello",  data);
+	///addToEmptyFile(fp, "Hello",  data);
 	
 	//myCreate(fp);
     char* inputCmd = NULL;							//store user command
@@ -116,10 +116,10 @@ void printPrompt(){
 	printf("**************************************************************************\n");
 	printf("Please type in file system commands for those listed below ");
 	printf("\nin the following format:\n");
-	printf("- create <file name>\n");
-	printf("- createDir <directory name>\n");
-	printf("- write <externalfile.txt> - writes external file into the file system\n");
-	printf("- read  <path>|<filename> - reads from disk the data of that specific file\n");
+	printf("- create <filename>.<ext>    - creates an empty file \n");
+	printf("- createDir <directory name> - creates a directory\n");
+	printf("- write <externalfile>.<ext> - writes external file into the file system\n");
+	printf("- read  <path>|<filename>    - reads from disk the data of that specific file\n");
 	printf("CTRL-C to exit\n");
 	printf("**************************************************************************\n\n");
 }
@@ -408,25 +408,15 @@ int findEntry(FILE* fp, int s_offset, int e_offset, char* name, char* metadata){
 
 	unsigned char bytes_read[entrySize];
 	char fileName[nameLength];
+	
 	//scan directory for matching entry specified by filename
 	for(i = s_offset*SECTOR_SIZE; i <= e_offset*SECTOR_SIZE; i+=32){
 		printf("dir/file entry location in bytes = %d\n", i);
 		fseek(fp, i, SEEK_SET);										//scan every 32 bytes
-		//printf("ftell(); %ld\n", ftell(fp));
 		fread(bytes_read, sizeof(unsigned char), entrySize, fp);	//read into array 32 bytes
 		copyArrays(fileName, bytes_read, nameLength); 	//read into char array filename
 		copyArrays(metadata, bytes_read, entrySize);	//read into char array copy of meta data
 
-		//Read in starting cluster which is 26, 27. Use memcpy to read into unsigned short
-		/*
-		unsigned char temp[2];
-		temp[1] = bytes_read[26];
-		temp[2] = bytes_read[27];
-		printf("%c%c\n", bytes_read[26], bytes_read[27]);
-		printf("temp = %s\n", temp);
-		memcpy(&val, temp, sizeof(val));
-		printf("starting cluster: %hd\n", val);
-		*/
 		val += bytes_read[26] | (bytes_read[27]<<8);
 		printf("starting cluster: %hd\n", val);
 		//get file comparison
@@ -602,10 +592,11 @@ void mapFatData(FILE* fp, struct RD* r, char data[], int fatLocation){
 
 void addToEmptyFile(FILE* fp, char* fileName, char data[]){
 	char metadata[32];
+	printf("fileName: %s\n", fileName);
 	//rewrite/update fat info of that entry
-	int offset = findEntry(fp, RD_OFFSET*SECTOR_SIZE, 
-							(DATA_OFFSET-1)*SECTOR_SIZE, fileName, metadata);
-	printf("offset: %d\n", offset);
+	//int offset = findEntry(fp, RD_OFFSET*SECTOR_SIZE, 
+	//						(DATA_OFFSET-1)*SECTOR_SIZE, fileName, metadata);
+	//printf("offset: %d\n", offset);
 	
 }
 
