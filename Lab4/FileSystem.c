@@ -371,7 +371,7 @@ void traverse(FILE* fp, char* dir_files[], int size){
 	val += metadata[26] | (metadata[27]<<8);
 	printf("starting cluster: %hd\n", val);
 	//offset from fat = sector offset from data region (in bytes)
-	int offset = val - SECTOR_SIZE;				 
+	int offset = (val - SECTOR_SIZE)/2;	//divide by 2 because every 2 fat byte maps to 1 data sector 
 	printf("offset is %d\n", offset);
 	
 
@@ -394,15 +394,12 @@ void traverse(FILE* fp, char* dir_files[], int size){
 		//keep looping until stop condition -1 is read	
 		//do{
 			//look for respective data region from 1-to-1 mapping
+			printf("offset #: %d\n", offset);
 			fseek(fp, (offset+DATA_OFFSET)*SECTOR_SIZE, SEEK_SET);
+			printf("read sector: %d\n", (offset+DATA_OFFSET));
 			//since we know the file size, read in all data assuming contiguous
 			fread(dataRead, sizeof(unsigned char), fileSize, fp);
-			/*
-			for(i = 0; i < fileSize; i++){
-				printf("dataRead[%d]: %c\n", i, dataRead[i]);
-			}
-			*/
-			printf("input:\n %s\n", dataRead);
+			printf("input:\n\n %s\n", dataRead);
 
 			//update fat val
 		//}while(fatVal != 0xFFFF)		
